@@ -109,27 +109,29 @@ def render_heatmap(
     data_by_date: dict[date, Optional[HabitDay]],
     from_date: date,
     to_date: date,
+    today: date,
     colors: list[str],
 ) -> None:
-    outside_style = "#3a3a3a"
-    no_data_style = "#5a5a5a"
+    no_activity_style = "#5a5a5a"
+    blank = " " * len(BLOCK)
 
     for weekday in range(7):
         line = Text()
-        for week_index, week in enumerate(weeks):
+        for week in weeks:
             day = week[weekday]
+            if day > today:
+                line.append(blank)
+                continue
+            glyph = BLOCK
             if day < from_date or day > to_date:
-                style = outside_style
-                glyph = BLOCK
+                style = no_activity_style
             else:
                 data = data_by_date.get(day)
-                if data is None:
-                    style = no_data_style
-                    glyph = BLOCK
+                if data is None or data.checked == 0:
+                    style = no_activity_style
                 else:
                     level = ratio_to_level(data.ratio)
                     style = colors[level]
-                    glyph = BLOCK
             line.append(glyph, style=style)
         console.print(line)
 
@@ -226,18 +228,21 @@ def main() -> None:
         data_by_date,
         from_date,
         to_date,
+        today,
         colors,
     )
 
     data_points = [data for data in data_by_date.values() if data is not None]
-    no_data_days = len(data_by_date) - len(data_points)
+    no_activity_days = sum(
+        1 for data in data_by_date.values() if data is None or data.checked == 0
+    )
     avg_ratio = 0.0
     if data_points:
         avg_ratio = sum(data.ratio for data in data_points) / len(data_points)
     stats_parts = [
         f"Tracked: {len(data_points)} days",
         f"Avg: {avg_ratio * 100:.0f}%",
-        f"No data: {no_data_days} days",
+        f"No activity: {no_activity_days} days",
     ]
     stats_width = heatmap_width(weeks, BLOCK)
     console.print(build_stats_line(stats_parts, stats_width))
