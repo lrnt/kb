@@ -1,6 +1,6 @@
-# lrnt
+# kb
 
-Static site build scripts and small utilities for a personal knowledge base.
+Personal knowledge base utilities
 
 ## Projects
 - `web/`: Pandoc-based static site builder for notes in `vault/` (vault content is not tracked).
