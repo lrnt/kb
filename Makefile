@@ -1,6 +1,4 @@
-# Thin wrappers around build.py
-
-.PHONY: all clean serve dev habits
+.PHONY: all clean serve dev habits deploy
 
 all:
 	./web/scripts/build.py --all
@@ -17,5 +15,5 @@ dev:
 habits:
 	./habits/main.py
 
-deploy:
+deploy: clean all
 	netlify deploy --prod --dir=web/build/
