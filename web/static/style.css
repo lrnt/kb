@@ -51,6 +51,11 @@ a:hover {
     text-decoration-color: var(--text);
 }
 
+a:focus-visible {
+    outline: 2px solid var(--accent-strong);
+    outline-offset: 3px;
+}
+
 .page {
     display: grid;
     grid-template-columns: 260px minmax(0, 1fr);
@@ -77,14 +82,14 @@ a:hover {
     color: var(--text);
     font-weight: 700;
     letter-spacing: 0.1em;
-    text-transform: uppercase;
     font-size: var(--title-size);
     line-height: var(--title-line);
 }
 
 .brand-link:hover {
-    color: var(--accent);
-    background-color: transparent;
+    color: var(--bg);
+    background-color: var(--text);
+    text-decoration-color: var(--text);
 }
 
 .brand-tagline {
@@ -121,18 +126,24 @@ a:hover {
     padding: 4px 2px;
     text-decoration: none;
     color: var(--text);
+    overflow-wrap: anywhere;
 }
 
 .nav-link:hover {
-    color: var(--accent);
-    background-color: transparent;
-    text-decoration: underline;
-    text-decoration-color: currentColor;
+    color: var(--bg);
+    background-color: var(--text);
+    text-decoration-color: var(--text);
 }
 
 .nav-home .nav-link {
     font-weight: 600;
     color: var(--accent-strong);
+}
+
+.nav-home .nav-link:hover {
+    color: var(--bg);
+    background-color: var(--text);
+    text-decoration-color: var(--text);
 }
 
 .nav-path {
@@ -156,6 +167,7 @@ a:hover {
 
 .content-inner {
     max-width: 72ch;
+    overflow-wrap: anywhere;
 }
 
 #title-block-header {
@@ -169,6 +181,7 @@ a:hover {
     font-size: var(--title-size);
     line-height: var(--title-line);
     letter-spacing: -0.02em;
+    text-wrap: balance;
 }
 
 h1,
@@ -179,6 +192,8 @@ h4 {
     line-height: 1.4;
     margin: 1.6rem 0 0.6rem;
     letter-spacing: -0.02em;
+    text-wrap: balance;
+    scroll-margin-top: 1.2rem;
 }
 
 h1 {
