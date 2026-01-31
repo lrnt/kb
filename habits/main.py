@@ -220,7 +220,7 @@ def main() -> None:
     end_grid = to_date + timedelta(days=(6 - to_date.weekday()))
     weeks = chunk_weeks(start_grid, end_grid)
 
-    colors = ["#0b1f0b", "#144d14", "#1f7a1f", "#2fb82f", "#5cff5c"]
+    colors = ["#0b1f0b", "#0b2d0b", "#186318", "#2bd42b", "#9dff9d"]
     console = Console()
     render_heatmap(
         console,
