@@ -17,6 +17,9 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+ROOT = Path(__file__).resolve().parents[1]
+VAULT_DIR = ROOT.parent / "vault" / "dailies"
+
 DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})\.md$")
 CHECKBOX_RE = re.compile(r"^\s*-\s*\[(?P<state>[ xX])\]")
 HABIT_TAG_RE = re.compile(r"#habits/[A-Za-z0-9_\-/]+")
@@ -176,8 +179,7 @@ def resolve_date_range(args: argparse.Namespace, today: date) -> tuple[date, dat
 def main() -> None:
     args = parse_args()
     if args.vault is None:
-        repo_root = Path(__file__).resolve().parents[1]
-        vault_path = repo_root / "vault" / "dailies"
+        vault_path = VAULT_DIR
     else:
         vault_path = Path(args.vault)
     today = date.today()

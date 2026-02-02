@@ -18,7 +18,7 @@ from pathlib import Path
 
 # Paths (relative to web/)
 ROOT = Path(__file__).parent.parent
-NOTES_DIR = ROOT.parent / "vault"
+NOTES_DIR = ROOT.parent.parent / "vault"
 BUILD_DIR = ROOT / "build"
 STATIC_DIR = ROOT / "static"
 CACHE_FILE = BUILD_DIR / ".build_cache.json"

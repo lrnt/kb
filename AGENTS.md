@@ -5,7 +5,7 @@ notes and a terminal habits heatmap.
 
 ## Project Layout
 
-- `vault/`: source notes (Obsidian-style). Notes publish to the site when
+- `../vault/`: source notes (Obsidian-style). Notes publish to the site when
   frontmatter includes `public: true`.
 - `web/`: Pandoc-based static site builder and assets. Treat `web/build/` as
   generated output.
@@ -23,7 +23,7 @@ notes and a terminal habits heatmap.
 
 ## Habits Data Rules
 
-- Daily files live in `vault/dailies/` and must be named `YYYY-MM-DD.md`.
+- Daily files live in `../vault/dailies/` and must be named `YYYY-MM-DD.md`.
 - Only checkbox lines with a `#habits/<id>` tag are counted; untagged checkboxes
   are ignored.
 
@@ -35,6 +35,6 @@ notes and a terminal habits heatmap.
 
 ## Notes For Changes
 
-- Do not edit files under `vault/` or `web/build/`.
+- Do not edit files under `../vault/` or `web/build/`.
 - There are no tests in this repo; use the build or scripts above to validate
   changes.

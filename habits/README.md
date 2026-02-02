@@ -13,7 +13,7 @@ uv run main.py
 ```bash
 uv run main.py --weeks 12
 uv run main.py --from 2026-01-01 --to 2026-01-31
-uv run main.py --vault ./vault/dailies
+uv run main.py --vault ../../vault/dailies
 uv run main.py --no-show-legend
 ```
 

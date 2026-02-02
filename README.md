@@ -3,7 +3,7 @@
 Personal knowledge base utilities
 
 ## Projects
-- `web/`: Pandoc-based static site builder for notes in `vault/` (vault content is not tracked).
+- `web/`: Pandoc-based static site builder for notes in `../vault/` (vault content is not tracked).
 - `habits/`: terminal habits heatmap renderer for daily notes.
 
 ## Commands

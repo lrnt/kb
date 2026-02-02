@@ -1,6 +1,6 @@
 # Web
 
-Static site build scripts (Pandoc + Lua filter) for notes in `../vault`.
+Static site build scripts (Pandoc + Lua filter) for notes in `../../vault`.
 
 ## Commands
 - `./scripts/build.py` clean build output for deploy

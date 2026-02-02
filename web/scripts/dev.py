@@ -15,7 +15,7 @@ from livereload import Server
 ROOT = Path(__file__).parent.parent
 BUILD_DIR = ROOT / "build"
 BUILD_SCRIPT = ROOT / "scripts" / "build.py"
-VAULT_DIR = ROOT.parent / "vault"
+VAULT_DIR = ROOT.parent.parent / "vault"
 STATIC_ITEMS = [
     ROOT / "static",
     ROOT / "_redirects",
