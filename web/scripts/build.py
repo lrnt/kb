@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import hashlib
 import json
 import shutil
@@ -23,6 +24,7 @@ from notes import (
     split_frontmatter,
 )
 from paths import ABOUT_MD, BUILD_DIR, CACHE_FILE, ROOT
+from recipes import get_recipes
 from render import (
     build_markdown_renderer,
     build_wikilink_map,
@@ -38,12 +40,14 @@ from static import cleanup_empty_dirs, sync_static_items
 if TYPE_CHECKING:
     from markdown import Markdown
     from notes import NoteInfo
+    from recipes import Ingredient, RecipeInfo
 
 DEFAULT_CACHE = {
     "templates_mtime": 0,
     "nav_hash": "",
     "wikilinks_hash": "",
     "notes": {},
+    "recipes": {},
     "about_md_mtime": 0,
 }
 
@@ -52,6 +56,7 @@ def new_cache() -> dict:
     """Create a fresh build cache with defaults."""
     cache = DEFAULT_CACHE.copy()
     cache["notes"] = {}
+    cache["recipes"] = {}
     return cache
 
 
@@ -70,6 +75,8 @@ def load_cache() -> dict:
 
     if not isinstance(cache.get("notes"), dict):
         cache["notes"] = {}
+    if not isinstance(cache.get("recipes"), dict):
+        cache["recipes"] = {}
     return cache
 
 
@@ -207,6 +214,172 @@ def prune_private_notes(cache: dict, public_notes: list["NoteInfo"]) -> bool:
     return removed
 
 
+def recipe_needs_rebuild(
+    recipe: "RecipeInfo",
+    cache: dict,
+    templates_changed: bool,
+) -> bool:
+    """Check if a recipe needs rebuilding."""
+    key = str(recipe.rel)
+    cached = cache.get("recipes", {}).get(key)
+
+    if not cached:
+        return True
+
+    output = BUILD_DIR / cached["output"]
+    if not output.exists():
+        return True
+
+    if templates_changed:
+        return True
+
+    if recipe.path.stat().st_mtime > cached["mtime"]:
+        return True
+
+    return False
+
+
+def format_ingredient(ingredient: "Ingredient") -> str:
+    parts = [ingredient.quantity, ingredient.unit, ingredient.name]
+    return " ".join(part for part in parts if part)
+
+
+def build_recipe(
+    recipe: "RecipeInfo",
+    cache: dict,
+    template,
+    nav_html: str,
+):
+    """Build single recipe, return output path."""
+    output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if recipe.ingredients:
+        ingredients_html = "\n".join(
+            f"<li>{html.escape(format_ingredient(ingredient))}</li>"
+            for ingredient in recipe.ingredients
+        )
+        ingredients_section = (
+            "<h2>Ingredients</h2>\n"
+            f'<ul class="recipe-ingredients">\n{ingredients_html}\n</ul>'
+        )
+    else:
+        ingredients_section = "<h2>Ingredients</h2>\n<p>No ingredients listed.</p>"
+
+    if recipe.steps:
+        steps_html = "\n".join(f"<li>{html.escape(step)}</li>" for step in recipe.steps)
+        steps_section = (
+            f'<h2>Steps</h2>\n<ol class="recipe-steps">\n{steps_html}\n</ol>'
+        )
+    else:
+        steps_section = "<h2>Steps</h2>\n<p>No steps yet.</p>"
+
+    content_html = "\n".join(
+        ['<section class="recipe">', ingredients_section, steps_section, "</section>"]
+    )
+
+    page_title = recipe.title
+    page_html = render_page(
+        template,
+        page_title=page_title,
+        title=recipe.title,
+        nav_html=nav_html,
+        content_html=content_html,
+    )
+    output.write_text(page_html)
+
+    key = str(recipe.rel)
+    cache.setdefault("recipes", {})[key] = {
+        "mtime": recipe.path.stat().st_mtime,
+        "metadata_hash": recipe.metadata_hash,
+        "output": str(output.relative_to(BUILD_DIR)),
+    }
+
+    return output
+
+
+def recipes_index_needs_rebuild(cache: dict, recipes: list["RecipeInfo"]) -> bool:
+    """Check if any recipe metadata changed (requires index rebuild)."""
+    output = BUILD_DIR / "recipes" / "index.html"
+    if not output.exists():
+        return True
+
+    cached = cache.get("recipes", {})
+    recipe_keys = {str(recipe.rel) for recipe in recipes}
+    if set(cached.keys()) != recipe_keys:
+        return True
+
+    for recipe in recipes:
+        key = str(recipe.rel)
+        cached_entry = cached.get(key, {})
+        if cached_entry.get("metadata_hash") != recipe.metadata_hash:
+            return True
+
+    return False
+
+
+def build_recipes_index(
+    recipes: list["RecipeInfo"],
+    template,
+    nav_html: str,
+):
+    """Build recipes index page."""
+    output = BUILD_DIR / "recipes" / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if recipes:
+        sorted_recipes = sorted(
+            recipes,
+            key=lambda recipe: (recipe.title.lower(), recipe.slug.as_posix()),
+        )
+        items = []
+        for recipe in sorted_recipes:
+            url = f"/recipes/{recipe.slug.as_posix()}"
+            title = html.escape(recipe.title)
+            items.append(f'<li><a href="{html.escape(url)}">{title}</a></li>')
+        list_html = "\n".join(items)
+        content_html = (
+            '<section class="recipes">\n'
+            '<ul class="recipe-list">\n'
+            f"{list_html}\n"
+            "</ul>\n"
+            "</section>"
+        )
+    else:
+        content_html = "<p>No recipes yet.</p>"
+
+    page_html = render_page(
+        template,
+        page_title="Recipes",
+        title="Recipes",
+        nav_html=nav_html,
+        content_html=content_html,
+    )
+    output.write_text(page_html)
+
+    return output
+
+
+def prune_removed_recipes(cache: dict, recipes: list["RecipeInfo"]) -> bool:
+    """Remove cached/build outputs for recipes no longer present."""
+    recipe_keys = {str(recipe.rel) for recipe in recipes}
+    removed = False
+
+    for key in list(cache.get("recipes", {}).keys()):
+        if key in recipe_keys:
+            continue
+        cached = cache["recipes"][key]
+        output = BUILD_DIR / cached.get("output", "")
+        if output.exists():
+            output.unlink()
+            cleanup_empty_dirs(output.parent, BUILD_DIR)
+            removed = True
+        del cache["recipes"][key]
+        removed = True
+
+    return removed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build static site")
     parser.add_argument("--all", action="store_true", help="Full rebuild")
@@ -235,6 +408,9 @@ def main():
     note_index = get_public_notes()
     public_notes = note_index.notes
     notes_pruned = prune_private_notes(cache, public_notes)
+    recipe_index = get_recipes()
+    recipes = recipe_index.recipes
+    recipes_pruned = prune_removed_recipes(cache, recipes)
 
     nav_html, nav_hash = build_nav(public_notes)
     wikilink_map = build_wikilink_map(public_notes)
@@ -256,6 +432,13 @@ def main():
             changed_files.append(output)
 
         output = build_index(cache, renderer, template, nav_html)
+        changed_files.append(output)
+
+        for recipe in recipes:
+            output = build_recipe(recipe, cache, template, nav_html)
+            changed_files.append(output)
+
+        output = build_recipes_index(recipes, template, nav_html)
         changed_files.append(output)
 
         changed_files.extend(sync_static_items())
@@ -312,6 +495,8 @@ def main():
     elif args.index:
         output = build_index(cache, renderer, template, nav_html)
         changed_files.append(output)
+        output = build_recipes_index(recipes, template, nav_html)
+        changed_files.append(output)
         changed_files.extend(sync_static_items())
 
     elif args.static:
@@ -336,6 +521,17 @@ def main():
                 template,
                 nav_html,
             )
+            changed_files.append(output)
+
+        for recipe in recipes:
+            if recipe_needs_rebuild(
+                recipe, cache, templates_changed=templates_changed_flag
+            ):
+                output = build_recipe(recipe, cache, template, nav_html)
+                changed_files.append(output)
+
+        if recipes_pruned or recipes_index_needs_rebuild(cache, recipes):
+            output = build_recipes_index(recipes, template, nav_html)
             changed_files.append(output)
 
         changed_files.extend(sync_static_items())

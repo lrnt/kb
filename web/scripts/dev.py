@@ -60,6 +60,7 @@ if __name__ == "__main__":
 
     # Watch notes -> incremental rebuild
     server.watch(str(VAULT_DIR / "**/*.md"), build_incremental)
+    server.watch(str(VAULT_DIR / "recipes" / "**/*.cook"), build_incremental)
 
     # Watch templates -> incremental rebuild (auto-detects full rebuild)
     server.watch(str(ROOT / "templates" / "**/*.html"), build_incremental)

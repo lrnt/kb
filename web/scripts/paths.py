@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 NOTES_DIR = ROOT.parent.parent / "vault"
+RECIPES_DIR = NOTES_DIR / "recipes"
 BUILD_DIR = ROOT / "build"
 STATIC_DIR = ROOT / "static"
 CACHE_FILE = BUILD_DIR / ".build_cache.json"
