@@ -98,7 +98,7 @@ a:focus-visible {
 }
 
 .nav-link {
-    display: block;
+    display: inline-block;
     padding: 4px 2px;
     text-decoration: none;
     color: var(--text);
