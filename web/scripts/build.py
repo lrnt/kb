@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["jinja2", "markdown"]
 # ///
 """Incremental build system for static site."""
 
@@ -12,9 +12,15 @@ import html
 import json
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+import xml.etree.ElementTree as etree
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markdown import Markdown
+from markdown.extensions import Extension
+from markdown.inlinepatterns import InlineProcessor
+from markdown.util import AtomicString
 
 # Paths (relative to web/)
 ROOT = Path(__file__).parent.parent
@@ -22,51 +28,24 @@ NOTES_DIR = ROOT.parent.parent / "vault"
 BUILD_DIR = ROOT / "build"
 STATIC_DIR = ROOT / "static"
 CACHE_FILE = BUILD_DIR / ".build_cache.json"
-HEADER_TEMPLATE = ROOT / "header.html"
-FOOTER_TEMPLATE = ROOT / "footer.html"
-INCLUDES_DIR = BUILD_DIR / "_includes"
-HEADER_INCLUDE = INCLUDES_DIR / "header.html"
-FILTERS_DIR = ROOT / "scripts" / "filters"
-WIKILINK_FILTER = FILTERS_DIR / "wikilinks.lua"
-WIKILINKS_META = INCLUDES_DIR / "wikilinks.json"
+TEMPLATES_DIR = ROOT / "templates"
 ABOUT_MD = NOTES_DIR / "about.md"
 STATIC_ITEMS = [
     STATIC_DIR,
     ROOT / "_redirects",
 ]
 
-PANDOC_FLAGS = [
-    "-f",
-    "markdown+wikilinks_title_after_pipe",
-    "-t",
-    "html5",
-    "-s",
-    "-c",
-    "/static/style.css",
-    "--section-divs",
-]
-
-NAV_PLACEHOLDER = "__NAV__"
-
 DEFAULT_CACHE = {
-    "header_mtime": 0,
-    "footer_mtime": 0,
+    "templates_mtime": 0,
     "nav_hash": "",
     "wikilinks_hash": "",
     "notes": {},
-    "static_mtime": 0,
     "about_md_mtime": 0,
-    "assets": [],
 }
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s+")
-ASSET_PATTERNS = [
-    re.compile(r"!\[[^\]]*\]\(([^)]+)\)"),
-    re.compile(r"\[[^\]]*\]\(([^)]+)\)"),
-    re.compile(r"!\[\[([^\]]+)\]\]"),
-    re.compile(r"\[\[([^\]]+)\]\]"),
-]
+WIKILINK_RE = r"\[\[([^\]]+)\]\]"
 
 
 @dataclass(frozen=True)
@@ -74,7 +53,6 @@ class NoteInfo:
     path: Path
     rel: Path
     title: str
-    date: str
     public: bool
     content: str
     metadata_hash: str
@@ -90,7 +68,6 @@ def new_cache() -> dict:
     """Create a fresh build cache with defaults."""
     cache = DEFAULT_CACHE.copy()
     cache["notes"] = {}
-    cache["assets"] = []
     return cache
 
 
@@ -109,8 +86,6 @@ def load_cache() -> dict:
 
     if not isinstance(cache.get("notes"), dict):
         cache["notes"] = {}
-    if not isinstance(cache.get("assets"), list):
-        cache["assets"] = []
     return cache
 
 
@@ -122,8 +97,6 @@ def save_cache(cache: dict):
 
 def cleanup_build_artifacts():
     """Remove build-only artifacts from output."""
-    if INCLUDES_DIR.exists():
-        shutil.rmtree(INCLUDES_DIR)
     if CACHE_FILE.exists():
         CACHE_FILE.unlink()
 
@@ -142,6 +115,16 @@ def parse_frontmatter(content: str) -> dict:
     return fm
 
 
+def split_frontmatter(content: str) -> tuple[dict, str]:
+    """Split YAML frontmatter from body content."""
+    match = FRONTMATTER_RE.match(content)
+    if not match:
+        return {}, content
+    fm = parse_frontmatter(content)
+    body = content[match.end() :].lstrip("\n")
+    return fm, body
+
+
 def normalize_wikilink_key(value: str) -> str:
     """Normalize wikilink keys for map lookups."""
     target = value.strip()
@@ -157,27 +140,25 @@ def normalize_wikilink_key(value: str) -> str:
     return target.lower()
 
 
-def make_metadata_hash(title: str, date: str) -> str:
-    """Hash only title+date for index invalidation."""
-    return hashlib.md5(f"{title}|{date}".encode()).hexdigest()
+def make_metadata_hash(title: str) -> str:
+    """Hash only title for index invalidation."""
+    return hashlib.md5(title.encode()).hexdigest()
 
 
 def load_note_info(path: Path) -> NoteInfo:
     """Load note content and metadata from disk."""
-    content = path.read_text()
-    fm = parse_frontmatter(content)
+    raw = path.read_text()
+    fm, body = split_frontmatter(raw)
     title = fm.get("title", "")
-    date = fm.get("date", "")
     public = fm.get("public", "").lower() == "true"
     rel = path.relative_to(NOTES_DIR)
     return NoteInfo(
         path=path,
         rel=rel,
         title=title,
-        date=date,
         public=public,
-        content=content,
-        metadata_hash=make_metadata_hash(title, date),
+        content=body,
+        metadata_hash=make_metadata_hash(title),
     )
 
 
@@ -264,61 +245,125 @@ def build_wikilink_map(public_notes: list[NoteInfo]) -> dict[str, str]:
     return link_map
 
 
-def write_wikilinks_meta(payload: str):
-    """Write wikilinks metadata file into build/_includes."""
-    INCLUDES_DIR.mkdir(parents=True, exist_ok=True)
-    WIKILINKS_META.write_text(payload)
+def split_wikilink(raw: str) -> tuple[str, str]:
+    """Split a wikilink target and label."""
+    if "|" in raw:
+        target, label = raw.split("|", 1)
+        return target.strip(), label.strip()
+    return raw.strip(), ""
 
 
-def render_header(nav_html: str) -> str:
-    """Render header include with sidebar nav."""
-    if not HEADER_TEMPLATE.exists():
-        return nav_html
-    template = HEADER_TEMPLATE.read_text()
-    if NAV_PLACEHOLDER in template:
-        return template.replace(NAV_PLACEHOLDER, nav_html)
-    return f"{template}\n{nav_html}"
+def wikilink_label_from_target(target: str) -> str:
+    """Derive a readable label from a wikilink target."""
+    label = target.strip()
+    if "#" in label:
+        label = label.split("#", 1)[0]
+    if label.endswith(".md"):
+        label = label[:-3]
+    return label.strip()
 
 
-def write_header_include(nav_html: str):
-    """Write rendered header include into build/_includes."""
-    INCLUDES_DIR.mkdir(parents=True, exist_ok=True)
-    HEADER_INCLUDE.write_text(render_header(nav_html))
+def resolve_wikilink(target: str, link_map: dict[str, str]) -> str | None:
+    """Resolve a wikilink target using the map."""
+    key = normalize_wikilink_key(target)
+    return link_map.get(key)
 
 
-def includes_changed(
-    cache: dict,
-    header_mtime: float,
-    footer_mtime: float,
-    nav_hash: str,
-    wikilinks_hash: str,
-) -> bool:
-    """Check if shared includes require rebuilds."""
-    return (
-        header_mtime > cache.get("header_mtime", 0)
-        or footer_mtime > cache.get("footer_mtime", 0)
-        or nav_hash != cache.get("nav_hash", "")
-        or wikilinks_hash != cache.get("wikilinks_hash", "")
-        or not HEADER_INCLUDE.exists()
-        or not WIKILINKS_META.exists()
+class WikiLinkInlineProcessor(InlineProcessor):
+    """Inline processor for Obsidian-style wikilinks."""
+
+    def __init__(self, pattern: str, link_map: dict[str, str]):
+        super().__init__(pattern)
+        self.link_map = link_map
+
+    def handleMatch(self, m, data):
+        raw = m.group(1)
+        target, label = split_wikilink(raw)
+        label_text = label or wikilink_label_from_target(target)
+        resolved = resolve_wikilink(target, self.link_map)
+        if not resolved:
+            return AtomicString(label_text), m.start(0), m.end(0)
+        el = etree.Element("a")
+        el.set("href", resolved)
+        el.text = label_text
+        return el, m.start(0), m.end(0)
+
+
+class WikiLinkExtension(Extension):
+    """Markdown extension to handle Obsidian wikilinks."""
+
+    def __init__(self, **kwargs):
+        self.link_map = kwargs.pop("link_map", {})
+        super().__init__(**kwargs)
+
+    def extendMarkdown(self, md: Markdown):
+        md.inlinePatterns.register(
+            WikiLinkInlineProcessor(WIKILINK_RE, self.link_map),
+            "wikilink",
+            175,
+        )
+
+
+def build_markdown_renderer(link_map: dict[str, str]) -> Markdown:
+    """Create a Markdown renderer with site extensions."""
+    return Markdown(
+        extensions=[
+            WikiLinkExtension(link_map=link_map),
+        ],
+        output_format="xhtml",
     )
 
 
-def update_includes_cache(
+def render_markdown(renderer: Markdown, content: str) -> str:
+    """Render Markdown content into HTML."""
+    renderer.reset()
+    return renderer.convert(content)
+
+
+def get_template_env() -> Environment:
+    """Create a Jinja environment for HTML templates."""
+    return Environment(
+        loader=FileSystemLoader(TEMPLATES_DIR),
+        autoescape=select_autoescape(["html"]),
+    )
+
+
+def get_templates_mtime() -> float:
+    """Get the latest mtime across HTML templates."""
+    mtimes = []
+    if TEMPLATES_DIR.exists():
+        for path in TEMPLATES_DIR.rglob("*.html"):
+            mtimes.append(path.stat().st_mtime)
+    return max(mtimes, default=0)
+
+
+def templates_changed(
     cache: dict,
-    header_mtime: float,
-    footer_mtime: float,
+    templates_mtime: float,
+    nav_hash: str,
+    wikilinks_hash: str,
+) -> bool:
+    """Check if shared templates require rebuilds."""
+    return (
+        templates_mtime > cache.get("templates_mtime", 0)
+        or nav_hash != cache.get("nav_hash", "")
+        or wikilinks_hash != cache.get("wikilinks_hash", "")
+    )
+
+
+def update_template_cache(
+    cache: dict,
+    templates_mtime: float,
     nav_hash: str,
     wikilinks_hash: str,
 ):
-    """Persist include-related values into cache."""
-    cache["header_mtime"] = header_mtime
-    cache["footer_mtime"] = footer_mtime
+    """Persist template-related values into cache."""
+    cache["templates_mtime"] = templates_mtime
     cache["nav_hash"] = nav_hash
     cache["wikilinks_hash"] = wikilinks_hash
 
 
-def needs_rebuild(note: NoteInfo, cache: dict, header_changed: bool) -> bool:
+def needs_rebuild(note: NoteInfo, cache: dict, templates_changed: bool) -> bool:
     """Check if a note needs rebuilding."""
     key = str(note.rel)
     cached = cache.get("notes", {}).get(key)
@@ -330,7 +375,7 @@ def needs_rebuild(note: NoteInfo, cache: dict, header_changed: bool) -> bool:
     if not output.exists():
         return True
 
-    if header_changed:
+    if templates_changed:
         return True
 
     if note.path.stat().st_mtime > cached["mtime"]:
@@ -339,56 +384,29 @@ def needs_rebuild(note: NoteInfo, cache: dict, header_changed: bool) -> bool:
     return False
 
 
-def build_pandoc_command(
-    header_include: Path,
-    footer_include: Path,
-    wikilinks_meta: Path,
-) -> list[str]:
-    """Build the base pandoc command with shared flags."""
-    cmd = ["pandoc", *PANDOC_FLAGS]
-    if WIKILINK_FILTER.exists():
-        cmd.extend(["--lua-filter", str(WIKILINK_FILTER)])
-    if wikilinks_meta and wikilinks_meta.exists():
-        cmd.extend(["--metadata-file", str(wikilinks_meta)])
-    if header_include and header_include.exists():
-        cmd.extend(["-B", str(header_include)])
-    if footer_include and footer_include.exists():
-        cmd.extend(["-A", str(footer_include)])
-    return cmd
-
-
-def run_pandoc_file(
-    input_path: Path,
-    output: Path,
-    header_include: Path,
-    footer_include: Path,
-    wikilinks_meta: Path,
-):
-    """Run pandoc for a file input."""
-    cmd = build_pandoc_command(header_include, footer_include, wikilinks_meta)
-    cmd.extend([str(input_path), "-o", str(output)])
-    subprocess.run(cmd, check=True, cwd=ROOT)
-
-
-def run_pandoc_text(
-    content: str,
-    output: Path,
-    header_include: Path,
-    footer_include: Path,
-    wikilinks_meta: Path,
-):
-    """Run pandoc for a text input."""
-    cmd = build_pandoc_command(header_include, footer_include, wikilinks_meta)
-    cmd.extend(["-o", str(output)])
-    subprocess.run(cmd, input=content.encode(), check=True, cwd=ROOT)
+def render_page(
+    template,
+    *,
+    page_title: str,
+    title: str,
+    nav_html: str,
+    content_html: str,
+) -> str:
+    """Render a full HTML page using Jinja templates."""
+    return template.render(
+        page_title=page_title,
+        title=title,
+        nav_html=nav_html,
+        content_html=content_html,
+    )
 
 
 def build_note(
     note: NoteInfo,
     cache: dict,
-    header_include: Path,
-    footer_include: Path,
-    wikilinks_meta: Path,
+    renderer: Markdown,
+    template,
+    nav_html: str,
 ) -> Path:
     """Build single note, return output path."""
     # foo.md → build/foo/index.html
@@ -396,7 +414,16 @@ def build_note(
     output = BUILD_DIR / rel.with_suffix("") / "index.html"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    run_pandoc_file(note.path, output, header_include, footer_include, wikilinks_meta)
+    content_html = render_markdown(renderer, note.content)
+    page_title = note.title or note.path.stem
+    page_html = render_page(
+        template,
+        page_title=page_title,
+        title=note.title,
+        nav_html=nav_html,
+        content_html=content_html,
+    )
+    output.write_text(page_html)
 
     # Update cache
     key = str(rel)
@@ -430,9 +457,9 @@ def index_needs_rebuild(cache: dict, public_notes: list[NoteInfo]) -> bool:
 
 def build_index(
     cache: dict,
-    header_include: Path,
-    footer_include: Path,
-    wikilinks_meta: Path,
+    renderer: Markdown,
+    template,
+    nav_html: str,
 ) -> Path:
     """Build index.html from about.md."""
     output = BUILD_DIR / "index.html"
@@ -440,10 +467,19 @@ def build_index(
 
     # Build index content from about.md
     about_content = ABOUT_MD.read_text() if ABOUT_MD.exists() else ""
+    fm, body = split_frontmatter(about_content)
 
-    run_pandoc_text(
-        about_content, output, header_include, footer_include, wikilinks_meta
+    content_html = render_markdown(renderer, body)
+    title = fm.get("title", "")
+    page_title = title
+    page_html = render_page(
+        template,
+        page_title=page_title,
+        title=title,
+        nav_html=nav_html,
+        content_html=content_html,
     )
+    output.write_text(page_html)
 
     # Update cache
     cache["about_md_mtime"] = ABOUT_MD.stat().st_mtime if ABOUT_MD.exists() else 0
@@ -504,53 +540,6 @@ def sync_static_items() -> list[Path]:
     return changed
 
 
-def normalize_link_target(raw: str) -> str:
-    """Normalize link target to a filesystem-like path."""
-    target = raw.strip()
-    if target.startswith("<") and target.endswith(">"):
-        target = target[1:-1].strip()
-    if " " in target:
-        target = target.split(" ", 1)[0]
-    if "|" in target:
-        target = target.split("|", 1)[0]
-    if "#" in target:
-        target = target.split("#", 1)[0]
-    return target.strip()
-
-
-def extract_asset_paths(note: NoteInfo) -> set[Path]:
-    """Extract local asset paths referenced by a note."""
-    content = note.content
-    assets: set[Path] = set()
-
-    for pattern in ASSET_PATTERNS:
-        for raw in pattern.findall(content):
-            target = normalize_link_target(raw)
-            if not target:
-                continue
-            if "://" in target or target.startswith("mailto:"):
-                continue
-            suffix = Path(target).suffix.lower()
-            if not suffix or suffix == ".md":
-                continue
-
-            if target.startswith("/"):
-                asset_path = NOTES_DIR / target.lstrip("/")
-            else:
-                asset_path = note.path.parent / target
-            try:
-                asset_path = asset_path.resolve()
-            except FileNotFoundError:
-                continue
-            if not asset_path.is_file():
-                continue
-            if not asset_path.is_relative_to(NOTES_DIR):
-                continue
-            assets.add(asset_path)
-
-    return assets
-
-
 def cleanup_empty_dirs(start: Path, stop: Path):
     """Remove empty directories up to stop (exclusive)."""
     current = start
@@ -560,38 +549,6 @@ def cleanup_empty_dirs(start: Path, stop: Path):
         except OSError:
             break
         current = current.parent
-
-
-def sync_note_assets(cache: dict, public_notes: list[NoteInfo]) -> list[Path]:
-    """Copy assets referenced by public notes into build/.
-
-    Returns list of changed files.
-    """
-    changed = []
-    desired_assets: set[Path] = set()
-
-    for note in public_notes:
-        desired_assets.update(extract_asset_paths(note))
-
-    desired_rel = {asset.relative_to(NOTES_DIR) for asset in desired_assets}
-    cached_assets = set(cache.get("assets", []))
-
-    for asset in desired_assets:
-        rel = asset.relative_to(NOTES_DIR)
-        dst_file = BUILD_DIR / rel
-
-        if copy_if_newer(asset, dst_file):
-            changed.append(dst_file)
-
-    for rel_str in cached_assets - {str(r) for r in desired_rel}:
-        stale = BUILD_DIR / rel_str
-        if stale.exists():
-            stale.unlink()
-            cleanup_empty_dirs(stale.parent, BUILD_DIR)
-            changed.append(stale)
-
-    cache["assets"] = sorted(str(r) for r in desired_rel)
-    return changed
 
 
 def prune_private_notes(cache: dict, public_notes: list[NoteInfo]) -> bool:
@@ -627,7 +584,7 @@ def main():
     parser.add_argument(
         "--keep-artifacts",
         action="store_true",
-        help="Keep build cache and includes for incremental builds",
+        help="Keep build cache for incremental builds",
     )
     args = parser.parse_args()
 
@@ -645,39 +602,29 @@ def main():
 
     nav_html, nav_hash = build_nav(public_notes)
     wikilink_map = build_wikilink_map(public_notes)
-    wikilinks_payload = json.dumps(
-        {"wikilinks": wikilink_map}, sort_keys=True, indent=2
-    )
+    wikilinks_payload = json.dumps(wikilink_map, sort_keys=True, indent=2)
     wikilinks_hash = hashlib.md5(wikilinks_payload.encode()).hexdigest()
 
-    # Check if includes changed (affects all notes)
-    header_mtime = HEADER_TEMPLATE.stat().st_mtime if HEADER_TEMPLATE.exists() else 0
-    footer_mtime = FOOTER_TEMPLATE.stat().st_mtime if FOOTER_TEMPLATE.exists() else 0
-    header_changed = includes_changed(
-        cache, header_mtime, footer_mtime, nav_hash, wikilinks_hash
+    # Check if templates changed (affects all notes)
+    templates_mtime = get_templates_mtime()
+    templates_changed_flag = templates_changed(
+        cache, templates_mtime, nav_hash, wikilinks_hash
     )
 
-    if header_changed:
-        write_header_include(nav_html)
-        write_wikilinks_meta(wikilinks_payload)
+    template_env = get_template_env()
+    template = template_env.get_template("base.html")
+    renderer = build_markdown_renderer(wikilink_map)
 
-    header_include = HEADER_INCLUDE if HEADER_INCLUDE.exists() else HEADER_TEMPLATE
-    footer_include = FOOTER_TEMPLATE
-    wikilinks_meta = WIKILINKS_META
-
-    if args.all or header_changed:
+    if args.all or templates_changed_flag:
         # Full rebuild
         for note in public_notes:
-            output = build_note(
-                note, cache, header_include, footer_include, wikilinks_meta
-            )
+            output = build_note(note, cache, renderer, template, nav_html)
             changed_files.append(output)
 
-        output = build_index(cache, header_include, footer_include, wikilinks_meta)
+        output = build_index(cache, renderer, template, nav_html)
         changed_files.append(output)
 
         changed_files.extend(sync_static_items())
-        changed_files.extend(sync_note_assets(cache, public_notes))
 
     elif args.note:
         # Single note rebuild
@@ -701,15 +648,12 @@ def main():
             if notes_pruned or index_needs_rebuild(cache, public_notes):
                 output = build_index(
                     cache,
-                    header_include,
-                    footer_include,
-                    wikilinks_meta,
+                    renderer,
+                    template,
+                    nav_html,
                 )
                 changed_files.append(output)
-            changed_files.extend(sync_note_assets(cache, public_notes))
-            update_includes_cache(
-                cache, header_mtime, footer_mtime, nav_hash, wikilinks_hash
-            )
+            update_template_cache(cache, templates_mtime, nav_hash, wikilinks_hash)
             changed_files.extend(sync_static_items())
             if args.keep_artifacts:
                 save_cache(cache)
@@ -718,59 +662,54 @@ def main():
             print(f"Skipped private note: {note_path}")
             return
 
-        output = build_note(
-            note_info, cache, header_include, footer_include, wikilinks_meta
-        )
+        output = build_note(note_info, cache, renderer, template, nav_html)
         changed_files.append(output)
 
         # Check if metadata changed → need index rebuild
         if notes_pruned or index_needs_rebuild(cache, public_notes):
             output = build_index(
                 cache,
-                header_include,
-                footer_include,
-                wikilinks_meta,
+                renderer,
+                template,
+                nav_html,
             )
             changed_files.append(output)
 
-        changed_files.extend(sync_note_assets(cache, public_notes))
         changed_files.extend(sync_static_items())
 
     elif args.index:
-        output = build_index(cache, header_include, footer_include, wikilinks_meta)
+        output = build_index(cache, renderer, template, nav_html)
         changed_files.append(output)
         changed_files.extend(sync_static_items())
 
     elif args.static:
         changed_files.extend(sync_static_items())
-        changed_files.extend(sync_note_assets(cache, public_notes))
 
     else:
         # Incremental: check what needs rebuilding
         for note in public_notes:
-            if needs_rebuild(note, cache, header_changed=header_changed):
+            if needs_rebuild(note, cache, templates_changed=templates_changed_flag):
                 output = build_note(
                     note,
                     cache,
-                    header_include,
-                    footer_include,
-                    wikilinks_meta,
+                    renderer,
+                    template,
+                    nav_html,
                 )
                 changed_files.append(output)
 
         if notes_pruned or index_needs_rebuild(cache, public_notes):
             output = build_index(
                 cache,
-                header_include,
-                footer_include,
-                wikilinks_meta,
+                renderer,
+                template,
+                nav_html,
             )
             changed_files.append(output)
 
         changed_files.extend(sync_static_items())
-        changed_files.extend(sync_note_assets(cache, public_notes))
 
-    update_includes_cache(cache, header_mtime, footer_mtime, nav_hash, wikilinks_hash)
+    update_template_cache(cache, templates_mtime, nav_hash, wikilinks_hash)
     if args.keep_artifacts:
         save_cache(cache)
     else:

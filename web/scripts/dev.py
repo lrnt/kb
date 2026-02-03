@@ -24,7 +24,7 @@ STATIC_ITEMS = [
 
 def run_build(*args) -> list[str]:
     """Run build.py with args, return list of changed files."""
-    cmd = [sys.executable, str(BUILD_SCRIPT), "--json", "--keep-artifacts", *args]
+    cmd = ["uv", "run", str(BUILD_SCRIPT), "--json", "--keep-artifacts", *args]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
 
     if result.returncode != 0:
@@ -61,11 +61,8 @@ if __name__ == "__main__":
     # Watch notes -> incremental rebuild
     server.watch(str(VAULT_DIR / "**/*.md"), build_incremental)
 
-    # Watch header/footer/filter -> incremental rebuild (auto-detects full rebuild)
-    server.watch(str(ROOT / "header.html"), build_incremental)
-
-    server.watch(str(ROOT / "footer.html"), build_incremental)
-    server.watch(str(ROOT / "scripts" / "filters" / "wikilinks.lua"), build_incremental)
+    # Watch templates -> incremental rebuild (auto-detects full rebuild)
+    server.watch(str(ROOT / "templates" / "**/*.html"), build_incremental)
 
     # Watch static items -> sync only
     for item in STATIC_ITEMS:
