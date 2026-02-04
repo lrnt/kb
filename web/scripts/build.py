@@ -266,11 +266,13 @@ def normalize_quantity(raw: str) -> tuple[str, float | None, bool]:
 
 
 def build_step_ingredient(ingredient: "Ingredient") -> dict:
-    qty_display, _, _ = normalize_quantity(ingredient.quantity)
+    qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
     return {
         "name": ingredient.name,
-        "qty": qty_display,
+        "qty_display": qty_display,
+        "qty_value": qty_value,
         "unit": ingredient.unit,
+        "fixed": fixed,
     }
 
 

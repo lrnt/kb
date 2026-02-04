@@ -207,17 +207,12 @@ a:focus-visible {
 }
 
 .step-ingredient {
-    display: inline-flex;
-    gap: 0.35rem;
-    align-items: baseline;
-}
-
-.step-ingredient-amount {
+    display: inline-block;
     white-space: nowrap;
 }
 
-.step-ingredient-unit {
-    color: var(--muted);
+.step-ingredient--sep::after {
+    content: ",\00a0";
 }
 
 .step-text {

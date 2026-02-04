@@ -54,18 +54,14 @@
                         <span class="step-number">{{ item.number }}</span>
                         {% if item.ingredients %}
                             <div class="step-ingredients">
-                                {% for ingredient in item.ingredients %}
-                                    <span class="step-ingredient">
-                                        <span class="step-ingredient-name">{{ ingredient.name }}</span>
-                                        {% if ingredient.qty or ingredient.unit %}
-                                            <span class="step-ingredient-amount">
-                                                {% if ingredient.qty %}<span class="step-ingredient-qty">{{ ingredient.qty }}</span>{% endif %}
-                                                {% if ingredient.unit %}<span class="step-ingredient-unit">{{ ingredient.unit }}</span>{% endif %}
-                                            </span>
-                                        {% endif %}
-                                    </span>
-                                    {% if not loop.last %},{% endif %}
-                                {% endfor %}
+                                {% for ingredient in item.ingredients -%}
+                                    <span class="step-ingredient{% if not loop.last %} step-ingredient--sep{% endif %}"
+                                          data-name="{{ ingredient.name }}"
+                                          data-qty-display="{{ ingredient.qty_display }}"
+                                          data-qty-value="{{ ingredient.qty_value if ingredient.qty_value is not none else '' }}"
+                                          data-unit="{{ ingredient.unit }}"
+                                          data-fixed="{{ 'true' if ingredient.fixed else 'false' }}"></span>
+                                {%- endfor %}
                             </div>
                         {% endif %}
                         <div class="step-text">{{ item.text }}</div>
@@ -84,12 +80,9 @@
     <script>
 (() => {
   const container = document.querySelector('.recipe-servings');
-  if (!container) return;
-  const baseServings = Number(container.dataset.baseServings);
-  const valueEl = container.querySelector('.recipe-servings-value');
-  const buttons = Array.from(container.querySelectorAll('.servings-button'));
-  if (!valueEl || buttons.length === 0) return;
-  if (!Number.isFinite(baseServings) || baseServings <= 0) return;
+  const baseServings = Number(container?.dataset.baseServings);
+  const valueEl = container?.querySelector('.recipe-servings-value');
+  const buttons = container ? Array.from(container.querySelectorAll('.servings-button')) : [];
 
   const items = Array.from(document.querySelectorAll('.recipe-ingredient')).map((item) => {
     const qtySpan = item.querySelector('.ingredient-qty');
@@ -102,11 +95,45 @@
     };
   });
 
+  const stepItems = Array.from(document.querySelectorAll('.step-ingredient')).map((item) => {
+    const rawValue = item.dataset.qtyValue;
+    return {
+      el: item,
+      name: item.dataset.name || '',
+      unit: item.dataset.unit || '',
+      qtyValue: rawValue === '' ? NaN : Number(rawValue),
+      qtyDisplay: item.dataset.qtyDisplay || '',
+      fixed: item.dataset.fixed === 'true',
+    };
+  });
+
   const formatDecimal = (value) => {
     const rounded = Math.round(value * 100) / 100;
     let text = rounded.toFixed(2);
     text = text.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
     return text;
+  };
+
+  const formatStepText = (item, scale) => {
+    const name = item.name;
+    let amount = '';
+    if (item.fixed || !Number.isFinite(item.qtyValue)) {
+      amount = item.qtyDisplay || '';
+    } else {
+      amount = formatDecimal(item.qtyValue * scale);
+    }
+    if (amount && item.unit) {
+      amount = `${amount}\u00a0${item.unit}`;
+    } else if (!amount && item.unit) {
+      amount = item.unit;
+    }
+    return amount ? `${name} ${amount}` : name;
+  };
+
+  const renderStepIngredients = (scale) => {
+    for (const item of stepItems) {
+      item.el.textContent = formatStepText(item, scale);
+    }
   };
 
   const update = (nextServings) => {
@@ -120,7 +147,12 @@
       }
       item.qtySpan.textContent = formatDecimal(item.qtyValue * scale);
     }
+    renderStepIngredients(scale);
   };
+
+  renderStepIngredients(1);
+  if (!container || !valueEl || buttons.length === 0) return;
+  if (!Number.isFinite(baseServings) || baseServings <= 0) return;
 
   for (const button of buttons) {
     button.addEventListener('click', () => {
