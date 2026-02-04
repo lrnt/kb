@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -49,6 +50,8 @@ DEFAULT_CACHE = {
     "recipes": {},
     "about_md_mtime": 0,
 }
+
+DECIMAL_RE = re.compile(r"^\d+(?:\.\d+)?$")
 
 
 def new_cache() -> dict:
@@ -238,9 +241,28 @@ def recipe_needs_rebuild(
     return False
 
 
-def format_ingredient(ingredient: "Ingredient") -> str:
-    parts = [ingredient.quantity, ingredient.unit, ingredient.name]
-    return " ".join(part for part in parts if part)
+def parse_decimal(value: str) -> float | None:
+    stripped = value.strip()
+    if not stripped:
+        return None
+    if not DECIMAL_RE.match(stripped):
+        return None
+    try:
+        return float(stripped)
+    except ValueError:
+        return None
+
+
+def normalize_quantity(raw: str) -> tuple[str, float | None, bool]:
+    if raw is None:
+        return "", None, False
+    stripped = raw.strip()
+    if not stripped:
+        return "", None, False
+    fixed = stripped.startswith("=")
+    if fixed:
+        stripped = stripped[1:].strip()
+    return stripped, parse_decimal(stripped) if stripped else None, fixed
 
 
 def build_recipe(
@@ -253,8 +275,26 @@ def build_recipe(
     output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    ingredients = [format_ingredient(ingredient) for ingredient in recipe.ingredients]
+    ingredients = []
+    for ingredient in recipe.ingredients:
+        qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
+        ingredients.append(
+            {
+                "name": ingredient.name,
+                "unit": ingredient.unit,
+                "qty_display": qty_display,
+                "qty_value": qty_value,
+                "fixed": fixed,
+            }
+        )
     steps = list(recipe.steps)
+    servings_value = parse_decimal(recipe.servings) if recipe.servings else None
+    servings_is_int = False
+    servings_display = recipe.servings
+    if servings_value is not None:
+        if servings_value.is_integer() and servings_value > 0:
+            servings_is_int = True
+            servings_display = str(int(servings_value))
 
     page_html = template.render(
         page_title=recipe.title,
@@ -263,6 +303,9 @@ def build_recipe(
         recipe=recipe,
         ingredients=ingredients,
         steps=steps,
+        servings_value=servings_value,
+        servings_is_int=servings_is_int,
+        servings_display=servings_display,
     )
     output.write_text(page_html)
 

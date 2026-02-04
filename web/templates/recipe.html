@@ -2,14 +2,29 @@
 
 {% block content %}
 {% if recipe.servings %}
-<p class="recipe-servings">Servings: {{ recipe.servings }}</p>
+<div class="recipe-servings"{% if servings_is_int %} data-base-servings="{{ servings_value }}"{% endif %}>
+<span class="recipe-servings-label">Servings</span>
+{% if servings_is_int %}
+<div class="recipe-servings-controls">
+<button class="servings-button" type="button" data-delta="-1" aria-label="Decrease servings">-</button>
+<span class="recipe-servings-value">{{ servings_display }}</span>
+<button class="servings-button" type="button" data-delta="1" aria-label="Increase servings">+</button>
+</div>
+{% else %}
+<span class="recipe-servings-value">{{ servings_display }}</span>
+{% endif %}
+</div>
 {% endif %}
 
 {% if ingredients %}
 <h2>Ingredients</h2>
 <ul class="recipe-ingredients">
 {% for item in ingredients %}
-<li>{{ item }}</li>
+<li class="recipe-ingredient" data-qty-value="{{ item.qty_value if item.qty_value is not none else '' }}" data-qty-display="{{ item.qty_display }}" data-fixed="{{ 'true' if item.fixed else 'false' }}">
+{% if item.qty_display %}<span class="ingredient-qty">{{ item.qty_display }}</span>{% endif %}
+{% if item.unit %}<span class="ingredient-unit">{{ item.unit }}</span>{% endif %}
+<span class="ingredient-name">{{ item.name }}</span>
+</li>
 {% endfor %}
 </ul>
 {% else %}
@@ -28,4 +43,57 @@
 <h2>Steps</h2>
 <p>No steps yet.</p>
 {% endif %}
+<script>
+(() => {
+  const container = document.querySelector('.recipe-servings');
+  if (!container) return;
+  const baseServings = Number(container.dataset.baseServings);
+  const valueEl = container.querySelector('.recipe-servings-value');
+  const buttons = Array.from(container.querySelectorAll('.servings-button'));
+  if (!valueEl || buttons.length === 0) return;
+  if (!Number.isFinite(baseServings) || baseServings <= 0) return;
+
+  const items = Array.from(document.querySelectorAll('.recipe-ingredient')).map((item) => {
+    const qtySpan = item.querySelector('.ingredient-qty');
+    const rawValue = item.dataset.qtyValue;
+    return {
+      qtySpan,
+      qtyValue: rawValue === '' ? NaN : Number(rawValue),
+      qtyDisplay: item.dataset.qtyDisplay || (qtySpan ? qtySpan.textContent.trim() : ''),
+      fixed: item.dataset.fixed === 'true',
+    };
+  });
+
+  const formatDecimal = (value) => {
+    const rounded = Math.round(value * 100) / 100;
+    let text = rounded.toFixed(2);
+    text = text.replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    return text;
+  };
+
+  const update = (nextServings) => {
+    if (!Number.isFinite(nextServings) || nextServings <= 0) return;
+    const scale = nextServings / baseServings;
+    for (const item of items) {
+      if (!item.qtySpan) continue;
+      if (item.fixed || !Number.isFinite(item.qtyValue)) {
+        item.qtySpan.textContent = item.qtyDisplay;
+        continue;
+      }
+      item.qtySpan.textContent = formatDecimal(item.qtyValue * scale);
+    }
+  };
+
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      const delta = Number(button.dataset.delta || '0');
+      const current = Number(valueEl.textContent || '');
+      if (!Number.isFinite(delta) || !Number.isFinite(current)) return;
+      const nextServings = Math.max(1, current + delta);
+      valueEl.textContent = String(nextServings);
+      update(nextServings);
+    });
+  }
+})();
+</script>
 {% endblock %}

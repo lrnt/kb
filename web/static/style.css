@@ -125,6 +125,49 @@ a:focus-visible {
     font-size: 0.92rem;
 }
 
+.recipe-servings {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0.2rem 0 1rem;
+}
+
+.recipe-servings-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.servings-button {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    width: 28px;
+    height: 28px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.servings-button:hover {
+    background: var(--text);
+    color: var(--bg);
+}
+
+.recipe-servings-value {
+    min-width: 2ch;
+    text-align: center;
+}
+
+.recipe-ingredient .ingredient-qty,
+.recipe-ingredient .ingredient-unit {
+    margin-right: 0.35rem;
+}
+
+.recipe-ingredient .ingredient-unit {
+    color: var(--muted);
+}
+
 .content {
     padding: 24px 56px 80px;
     background: transparent;
