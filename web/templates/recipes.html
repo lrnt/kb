@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if recipes %}
+<section class="recipes">
+<ul class="recipe-list">
+{% for recipe in recipes %}
+<li><a href="{{ recipe.url }}">{{ recipe.title }}</a></li>
+{% endfor %}
+</ul>
+</section>
+{% else %}
+<p>No recipes yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if recipe.servings %}
+<p class="recipe-servings">Servings: {{ recipe.servings }}</p>
+{% endif %}
+
+{% if ingredients %}
+<h2>Ingredients</h2>
+<ul class="recipe-ingredients">
+{% for item in ingredients %}
+<li>{{ item }}</li>
+{% endfor %}
+</ul>
+{% else %}
+<h2>Ingredients</h2>
+<p>No ingredients listed.</p>
+{% endif %}
+
+{% if steps %}
+<h2>Steps</h2>
+<ol class="recipe-steps">
+{% for step in steps %}
+<li>{{ step }}</li>
+{% endfor %}
+</ol>
+{% else %}
+<h2>Steps</h2>
+<p>No steps yet.</p>
+{% endif %}
+{% endblock %}

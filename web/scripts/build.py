@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import argparse
-import html
 import hashlib
 import json
 import shutil
@@ -254,42 +253,16 @@ def build_recipe(
     output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    if recipe.ingredients:
-        ingredients_html = "\n".join(
-            f"<li>{html.escape(format_ingredient(ingredient))}</li>"
-            for ingredient in recipe.ingredients
-        )
-        ingredients_section = (
-            "<h2>Ingredients</h2>\n"
-            f'<ul class="recipe-ingredients">\n{ingredients_html}\n</ul>'
-        )
-    else:
-        ingredients_section = "<h2>Ingredients</h2>\n<p>No ingredients listed.</p>"
+    ingredients = [format_ingredient(ingredient) for ingredient in recipe.ingredients]
+    steps = list(recipe.steps)
 
-    if recipe.steps:
-        steps_html = "\n".join(f"<li>{html.escape(step)}</li>" for step in recipe.steps)
-        steps_section = (
-            f'<h2>Steps</h2>\n<ol class="recipe-steps">\n{steps_html}\n</ol>'
-        )
-    else:
-        steps_section = "<h2>Steps</h2>\n<p>No steps yet.</p>"
-
-    content_sections = ['<section class="recipe">']
-    if recipe.servings:
-        servings_html = html.escape(recipe.servings)
-        content_sections.append(
-            f'<p class="recipe-servings">Servings: {servings_html}</p>'
-        )
-    content_sections.extend([ingredients_section, steps_section, "</section>"])
-    content_html = "\n".join(content_sections)
-
-    page_title = recipe.title
-    page_html = render_page(
-        template,
-        page_title=page_title,
+    page_html = template.render(
+        page_title=recipe.title,
         title=recipe.title,
         nav_html=nav_html,
-        content_html=content_html,
+        recipe=recipe,
+        ingredients=ingredients,
+        steps=steps,
     )
     output.write_text(page_html)
 
@@ -337,28 +310,21 @@ def build_recipes_index(
             recipes,
             key=lambda recipe: (recipe.title.lower(), recipe.slug.as_posix()),
         )
-        items = []
-        for recipe in sorted_recipes:
-            url = f"/recipes/{recipe.slug.as_posix()}"
-            title = html.escape(recipe.title)
-            items.append(f'<li><a href="{html.escape(url)}">{title}</a></li>')
-        list_html = "\n".join(items)
-        content_html = (
-            '<section class="recipes">\n'
-            '<ul class="recipe-list">\n'
-            f"{list_html}\n"
-            "</ul>\n"
-            "</section>"
-        )
+        recipe_items = [
+            {
+                "title": recipe.title,
+                "url": f"/recipes/{recipe.slug.as_posix()}",
+            }
+            for recipe in sorted_recipes
+        ]
     else:
-        content_html = "<p>No recipes yet.</p>"
+        recipe_items = []
 
-    page_html = render_page(
-        template,
+    page_html = template.render(
         page_title="Recipes",
         title="Recipes",
         nav_html=nav_html,
-        content_html=content_html,
+        recipes=recipe_items,
     )
     output.write_text(page_html)
 
@@ -428,22 +394,24 @@ def main():
     )
 
     template_env = get_template_env()
-    template = template_env.get_template("base.html")
+    base_template = template_env.get_template("base.html")
+    recipe_template = template_env.get_template("recipe.html")
+    recipes_template = template_env.get_template("recipes.html")
     renderer = build_markdown_renderer(wikilink_map)
 
     if args.all or templates_changed_flag:
         for note in public_notes:
-            output = build_note(note, cache, renderer, template, nav_html)
+            output = build_note(note, cache, renderer, base_template, nav_html)
             changed_files.append(output)
 
-        output = build_index(cache, renderer, template, nav_html)
+        output = build_index(cache, renderer, base_template, nav_html)
         changed_files.append(output)
 
         for recipe in recipes:
-            output = build_recipe(recipe, cache, template, nav_html)
+            output = build_recipe(recipe, cache, recipe_template, nav_html)
             changed_files.append(output)
 
-        output = build_recipes_index(recipes, template, nav_html)
+        output = build_recipes_index(recipes, recipes_template, nav_html)
         changed_files.append(output)
 
         changed_files.extend(sync_static_items())
@@ -470,7 +438,7 @@ def main():
                 output = build_index(
                     cache,
                     renderer,
-                    template,
+                    base_template,
                     nav_html,
                 )
                 changed_files.append(output)
@@ -483,14 +451,14 @@ def main():
             print(f"Skipped private note: {note_path}")
             return
 
-        output = build_note(note_info, cache, renderer, template, nav_html)
+        output = build_note(note_info, cache, renderer, base_template, nav_html)
         changed_files.append(output)
 
         if notes_pruned or index_needs_rebuild(cache, public_notes):
             output = build_index(
                 cache,
                 renderer,
-                template,
+                base_template,
                 nav_html,
             )
             changed_files.append(output)
@@ -498,9 +466,9 @@ def main():
         changed_files.extend(sync_static_items())
 
     elif args.index:
-        output = build_index(cache, renderer, template, nav_html)
+        output = build_index(cache, renderer, base_template, nav_html)
         changed_files.append(output)
-        output = build_recipes_index(recipes, template, nav_html)
+        output = build_recipes_index(recipes, recipes_template, nav_html)
         changed_files.append(output)
         changed_files.extend(sync_static_items())
 
@@ -514,7 +482,7 @@ def main():
                     note,
                     cache,
                     renderer,
-                    template,
+                    base_template,
                     nav_html,
                 )
                 changed_files.append(output)
@@ -523,7 +491,7 @@ def main():
             output = build_index(
                 cache,
                 renderer,
-                template,
+                base_template,
                 nav_html,
             )
             changed_files.append(output)
@@ -532,11 +500,11 @@ def main():
             if recipe_needs_rebuild(
                 recipe, cache, templates_changed=templates_changed_flag
             ):
-                output = build_recipe(recipe, cache, template, nav_html)
+                output = build_recipe(recipe, cache, recipe_template, nav_html)
                 changed_files.append(output)
 
         if recipes_pruned or recipes_index_needs_rebuild(cache, recipes):
-            output = build_recipes_index(recipes, template, nav_html)
+            output = build_recipes_index(recipes, recipes_template, nav_html)
             changed_files.append(output)
 
         changed_files.extend(sync_static_items())
