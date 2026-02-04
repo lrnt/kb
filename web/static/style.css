@@ -176,6 +176,35 @@ a:focus-visible {
     color: var(--muted);
 }
 
+.recipe-steps {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0.4rem 0 1rem;
+}
+
+.recipe-step {
+    display: grid;
+    grid-template-columns: 2.4ch 1fr;
+    column-gap: 0.8rem;
+    align-items: start;
+}
+
+.step-number {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.recipe-note {
+    margin-left: 4ch;
+    padding-left: 0.8rem;
+    border-left: 2px solid var(--border);
+    color: var(--muted);
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+
 .content {
     padding: 24px 56px 80px;
     background: transparent;

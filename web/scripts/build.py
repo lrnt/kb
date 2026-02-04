@@ -293,7 +293,26 @@ def build_recipe(
             )
         )
     ingredients = [row[2] for row in sorted(ingredient_rows, key=lambda row: row[:2])]
-    steps = list(recipe.steps)
+    steps = []
+    step_number = 0
+    for item in recipe.steps:
+        if item.kind == "step":
+            step_number += 1
+            steps.append(
+                {
+                    "kind": "step",
+                    "text": item.text,
+                    "number": step_number,
+                }
+            )
+        elif item.kind == "note":
+            steps.append(
+                {
+                    "kind": "note",
+                    "text": item.text,
+                    "number": None,
+                }
+            )
     servings_value = parse_decimal(recipe.servings) if recipe.servings else None
     servings_is_int = False
     servings_display = recipe.servings

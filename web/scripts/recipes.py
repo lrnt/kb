@@ -38,6 +38,12 @@ class Timer:
 
 
 @dataclass(frozen=True)
+class RecipeStep:
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True)
 class RecipeInfo:
     path: Path
     rel: Path
@@ -47,7 +53,7 @@ class RecipeInfo:
     ingredients: list[Ingredient]
     cookware: list[Cookware]
     timers: list[Timer]
-    steps: list[str]
+    steps: list[RecipeStep]
     metadata_hash: str
     public: bool
 
@@ -72,13 +78,13 @@ def make_metadata_hash(title: str) -> str:
 
 def parse_cooklang(
     content: str,
-) -> tuple[list[Ingredient], list[Cookware], list[Timer], list[str]]:
+) -> tuple[list[Ingredient], list[Cookware], list[Timer], list[RecipeStep]]:
     ingredients: list[Ingredient] = []
     seen: set[tuple[str, str, str]] = set()
     cookware: list[Cookware] = []
     cookware_seen: set[str] = set()
     timers: list[Timer] = []
-    steps: list[str] = []
+    steps: list[RecipeStep] = []
     current_lines: list[str] = []
 
     def replace_ingredient(match: re.Match) -> str:
@@ -118,14 +124,21 @@ def parse_cooklang(
         combined = " ".join(current_lines)
         combined = WHITESPACE_RE.sub(" ", combined).strip()
         if combined:
-            steps.append(combined)
+            steps.append(RecipeStep(kind="step", text=combined))
         current_lines.clear()
 
     for raw_line in content.splitlines():
-        if not raw_line.strip():
+        stripped_line = raw_line.strip()
+        if not stripped_line:
             flush_step()
             continue
-        line = raw_line.strip()
+        if stripped_line.startswith(">"):
+            flush_step()
+            note_text = stripped_line[1:].strip()
+            if note_text:
+                steps.append(RecipeStep(kind="note", text=note_text))
+            continue
+        line = stripped_line
         line = INGREDIENT_RE.sub(replace_ingredient, line)
         line = COOKWARE_RE.sub(replace_cookware, line)
         line = TIMER_RE.sub(replace_timer, line)
@@ -142,7 +155,7 @@ def load_recipe(path: Path) -> RecipeInfo | None:
     raw = path.read_text()
     fm, body = split_frontmatter(raw)
     title = fm.get("title", "") or path.stem
-    servings = fm.get("servings", "")
+    servings = fm.get("serves", "") or fm.get("servings", "")
     ingredients, cookware, timers, steps = parse_cooklang(body)
     rel = path.relative_to(RECIPES_DIR)
     slug = rel.with_suffix("")

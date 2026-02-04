@@ -3,7 +3,7 @@
     {% if recipe.servings %}
         <div class="recipe-servings"
              {% if servings_is_int %}data-base-servings="{{ servings_value }}"{% endif %}>
-            <span class="recipe-servings-label">Servings</span>
+            <span class="recipe-servings-label">Serves</span>
             {% if servings_is_int %}
                 <div class="recipe-servings-controls">
                     <button class="servings-button"
@@ -47,9 +47,20 @@
     {% endif %}
     {% if steps %}
         <h2>Steps</h2>
-        <ol class="recipe-steps">
-            {% for step in steps %}<li>{{ step }}</li>{% endfor %}
-        </ol>
+        <div class="recipe-steps">
+            {% for item in steps %}
+                {% if item.kind == "step" %}
+                    <div class="recipe-step">
+                        <span class="step-number">{{ item.number }}</span>
+                        <div class="step-body">{{ item.text }}</div>
+                    </div>
+                {% else %}
+                    <div class="recipe-note">
+                        <span class="note-text">{{ item.text }}</span>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
     {% else %}
         <h2>Steps</h2>
         <p>No steps yet.</p>
