@@ -52,7 +52,23 @@
                 {% if item.kind == "step" %}
                     <div class="recipe-step">
                         <span class="step-number">{{ item.number }}</span>
-                        <div class="step-body">{{ item.text }}</div>
+                        {% if item.ingredients %}
+                            <div class="step-ingredients">
+                                {% for ingredient in item.ingredients %}
+                                    <span class="step-ingredient">
+                                        <span class="step-ingredient-name">{{ ingredient.name }}</span>
+                                        {% if ingredient.qty or ingredient.unit %}
+                                            <span class="step-ingredient-amount">
+                                                {% if ingredient.qty %}<span class="step-ingredient-qty">{{ ingredient.qty }}</span>{% endif %}
+                                                {% if ingredient.unit %}<span class="step-ingredient-unit">{{ ingredient.unit }}</span>{% endif %}
+                                            </span>
+                                        {% endif %}
+                                    </span>
+                                    {% if not loop.last %},{% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="step-text">{{ item.text }}</div>
                     </div>
                 {% else %}
                     <div class="recipe-note">

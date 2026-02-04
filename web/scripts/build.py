@@ -265,6 +265,15 @@ def normalize_quantity(raw: str) -> tuple[str, float | None, bool]:
     return stripped, parse_decimal(stripped) if stripped else None, fixed
 
 
+def build_step_ingredient(ingredient: "Ingredient") -> dict:
+    qty_display, _, _ = normalize_quantity(ingredient.quantity)
+    return {
+        "name": ingredient.name,
+        "qty": qty_display,
+        "unit": ingredient.unit,
+    }
+
+
 def build_recipe(
     recipe: "RecipeInfo",
     cache: dict,
@@ -303,6 +312,10 @@ def build_recipe(
                     "kind": "step",
                     "text": item.text,
                     "number": step_number,
+                    "ingredients": [
+                        build_step_ingredient(ingredient)
+                        for ingredient in item.ingredients
+                    ],
                 }
             )
         elif item.kind == "note":
@@ -311,6 +324,7 @@ def build_recipe(
                     "kind": "note",
                     "text": item.text,
                     "number": None,
+                    "ingredients": [],
                 }
             )
     servings_value = parse_decimal(recipe.servings) if recipe.servings else None

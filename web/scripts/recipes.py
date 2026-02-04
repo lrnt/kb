@@ -41,6 +41,7 @@ class Timer:
 class RecipeStep:
     kind: str
     text: str
+    ingredients: list[Ingredient]
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,8 @@ def parse_cooklang(
     timers: list[Timer] = []
     steps: list[RecipeStep] = []
     current_lines: list[str] = []
+    step_ingredients: list[Ingredient] = []
+    step_ingredients_seen: set[tuple[str, str, str]] = set()
 
     def replace_ingredient(match: re.Match) -> str:
         name = clean_token_name(match.group("name") or "")
@@ -96,6 +99,9 @@ def parse_cooklang(
             if key not in seen:
                 ingredients.append(Ingredient(name=name, quantity=qty, unit=unit))
                 seen.add(key)
+            if key not in step_ingredients_seen:
+                step_ingredients.append(Ingredient(name=name, quantity=qty, unit=unit))
+                step_ingredients_seen.add(key)
         return name
 
     def replace_cookware(match: re.Match) -> str:
@@ -120,12 +126,22 @@ def parse_cooklang(
 
     def flush_step():
         if not current_lines:
+            step_ingredients.clear()
+            step_ingredients_seen.clear()
             return
         combined = " ".join(current_lines)
         combined = WHITESPACE_RE.sub(" ", combined).strip()
         if combined:
-            steps.append(RecipeStep(kind="step", text=combined))
+            steps.append(
+                RecipeStep(
+                    kind="step",
+                    text=combined,
+                    ingredients=list(step_ingredients),
+                )
+            )
         current_lines.clear()
+        step_ingredients.clear()
+        step_ingredients_seen.clear()
 
     for raw_line in content.splitlines():
         stripped_line = raw_line.strip()
@@ -136,7 +152,7 @@ def parse_cooklang(
             flush_step()
             note_text = stripped_line[1:].strip()
             if note_text:
-                steps.append(RecipeStep(kind="note", text=note_text))
+                steps.append(RecipeStep(kind="note", text=note_text, ingredients=[]))
             continue
         line = stripped_line
         line = INGREDIENT_RE.sub(replace_ingredient, line)
