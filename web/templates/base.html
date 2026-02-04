@@ -1,36 +1,36 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>{{ page_title }}</title>
-  <link rel="stylesheet" href="/static/style.css" />
-</head>
-<body>
-<div class="page">
-    <aside class="sidebar">
-        <div class="brand">
-            <a class="brand-link" href="/">lrnt.</a>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport"
+              content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+        <title>{{ page_title }}</title>
+        <link rel="stylesheet" href="/static/style.css" />
+    </head>
+    <body>
+        <div class="page">
+            <aside class="sidebar">
+                <div class="brand">
+                    <a class="brand-link" href="/">lrnt.</a>
+                </div>
+                <nav class="nav">
+                    <ul class="nav-list">
+                        {{ nav_html | safe }}
+                    </ul>
+                </nav>
+            </aside>
+            <main class="content">
+                <div class="content-inner">
+                    {% if title %}
+                        <header id="title-block-header">
+                            <h1 class="title">{{ title }}</h1>
+                        </header>
+                    {% endif %}
+                    {% block content %}{{ content_html | safe }}{% endblock %}
+                </div>
+                <script data-goatcounter="https://lrnt.me/gc"
+                        async
+                        src="https://lrnt.me/gc.js"></script>
+            </main>
         </div>
-        <nav class="nav">
-            <ul class="nav-list">
-                {{ nav_html | safe }}
-            </ul>
-        </nav>
-    </aside>
-    <main class="content">
-        <div class="content-inner">
-{% if title %}
-<header id="title-block-header">
-<h1 class="title">{{ title }}</h1>
-</header>
-{% endif %}
-{% block content %}
-{{ content_html | safe }}
-{% endblock %}
-        </div>
-        <script data-goatcounter="https://lrnt.me/gc"
-                async src="https://lrnt.me/gc.js"></script>
-    </main>
-</div>
-</body>
+    </body>
 </html>

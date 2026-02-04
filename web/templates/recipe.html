@@ -1,49 +1,54 @@
 {% extends "base.html" %}
-
 {% block content %}
-{% if recipe.servings %}
-<div class="recipe-servings"{% if servings_is_int %} data-base-servings="{{ servings_value }}"{% endif %}>
-<span class="recipe-servings-label">Servings</span>
-{% if servings_is_int %}
-<div class="recipe-servings-controls">
-<button class="servings-button" type="button" data-delta="-1" aria-label="Decrease servings">-</button>
-<span class="recipe-servings-value">{{ servings_display }}</span>
-<button class="servings-button" type="button" data-delta="1" aria-label="Increase servings">+</button>
-</div>
-{% else %}
-<span class="recipe-servings-value">{{ servings_display }}</span>
-{% endif %}
-</div>
-{% endif %}
-
-{% if ingredients %}
-<h2>Ingredients</h2>
-<ul class="recipe-ingredients">
-{% for item in ingredients %}
-<li class="recipe-ingredient" data-qty-value="{{ item.qty_value if item.qty_value is not none else '' }}" data-qty-display="{{ item.qty_display }}" data-fixed="{{ 'true' if item.fixed else 'false' }}">
-{% if item.qty_display %}<span class="ingredient-qty">{{ item.qty_display }}</span>{% endif %}
-{% if item.unit %}<span class="ingredient-unit">{{ item.unit }}</span>{% endif %}
-<span class="ingredient-name">{{ item.name }}</span>
-</li>
-{% endfor %}
-</ul>
-{% else %}
-<h2>Ingredients</h2>
-<p>No ingredients listed.</p>
-{% endif %}
-
-{% if steps %}
-<h2>Steps</h2>
-<ol class="recipe-steps">
-{% for step in steps %}
-<li>{{ step }}</li>
-{% endfor %}
-</ol>
-{% else %}
-<h2>Steps</h2>
-<p>No steps yet.</p>
-{% endif %}
-<script>
+    {% if recipe.servings %}
+        <div class="recipe-servings"
+             {% if servings_is_int %}data-base-servings="{{ servings_value }}"{% endif %}>
+            <span class="recipe-servings-label">Servings</span>
+            {% if servings_is_int %}
+                <div class="recipe-servings-controls">
+                    <button class="servings-button"
+                            type="button"
+                            data-delta="-1"
+                            aria-label="Decrease servings">-</button>
+                    <span class="recipe-servings-value">{{ servings_display }}</span>
+                    <button class="servings-button"
+                            type="button"
+                            data-delta="1"
+                            aria-label="Increase servings">+</button>
+                </div>
+            {% else %}
+                <span class="recipe-servings-value">{{ servings_display }}</span>
+            {% endif %}
+        </div>
+    {% endif %}
+    {% if ingredients %}
+        <h2>Ingredients</h2>
+        <ul class="recipe-ingredients">
+            {% for item in ingredients %}
+                <li class="recipe-ingredient"
+                    data-qty-value="{{ item.qty_value if item.qty_value is not none else '' }}"
+                    data-qty-display="{{ item.qty_display }}"
+                    data-fixed="{{ 'true' if item.fixed else 'false' }}">
+                    {% if item.qty_display %}<span class="ingredient-qty">{{ item.qty_display }}</span>{% endif %}
+                    {% if item.unit %}<span class="ingredient-unit">{{ item.unit }}</span>{% endif %}
+                    <span class="ingredient-name">{{ item.name }}</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <h2>Ingredients</h2>
+        <p>No ingredients listed.</p>
+    {% endif %}
+    {% if steps %}
+        <h2>Steps</h2>
+        <ol class="recipe-steps">
+            {% for step in steps %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+    {% else %}
+        <h2>Steps</h2>
+        <p>No steps yet.</p>
+    {% endif %}
+    <script>
 (() => {
   const container = document.querySelector('.recipe-servings');
   if (!container) return;
@@ -95,5 +100,5 @@
     });
   }
 })();
-</script>
+    </script>
 {% endblock %}
