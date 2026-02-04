@@ -43,6 +43,7 @@ class RecipeInfo:
     rel: Path
     slug: Path
     title: str
+    servings: str
     ingredients: list[Ingredient]
     cookware: list[Cookware]
     timers: list[Timer]
@@ -141,6 +142,7 @@ def load_recipe(path: Path) -> RecipeInfo | None:
     raw = path.read_text()
     fm, body = split_frontmatter(raw)
     title = fm.get("title", "") or path.stem
+    servings = fm.get("servings", "")
     ingredients, cookware, timers, steps = parse_cooklang(body)
     rel = path.relative_to(RECIPES_DIR)
     slug = rel.with_suffix("")
@@ -149,6 +151,7 @@ def load_recipe(path: Path) -> RecipeInfo | None:
         rel=rel,
         slug=slug,
         title=title,
+        servings=servings,
         ingredients=ingredients,
         cookware=cookware,
         timers=timers,

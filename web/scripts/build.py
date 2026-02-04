@@ -274,9 +274,14 @@ def build_recipe(
     else:
         steps_section = "<h2>Steps</h2>\n<p>No steps yet.</p>"
 
-    content_html = "\n".join(
-        ['<section class="recipe">', ingredients_section, steps_section, "</section>"]
-    )
+    content_sections = ['<section class="recipe">']
+    if recipe.servings:
+        servings_html = html.escape(recipe.servings)
+        content_sections.append(
+            f'<p class="recipe-servings">Servings: {servings_html}</p>'
+        )
+    content_sections.extend([ingredients_section, steps_section, "</section>"])
+    content_html = "\n".join(content_sections)
 
     page_title = recipe.title
     page_html = render_page(
