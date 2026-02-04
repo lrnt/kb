@@ -11,9 +11,7 @@ from paths import RECIPES_DIR
 INGREDIENT_RE = re.compile(
     r"@(?P<name>[^@#~{\n]+)(?:\{(?P<qty>[^}%]*)(?:%(?P<unit>[^}]*))?\})?"
 )
-COOKWARE_RE = re.compile(
-    r"#(?P<name>[^@#~{\n]+)(?:\{(?P<qty>[^}%]*)(?:%(?P<unit>[^}]*))?\})?"
-)
+COOKWARE_RE = re.compile(r"#(?P<name>[^@#~{\n]+)(?:\{[^}]*\})?")
 TIMER_RE = re.compile(
     r"~(?:(?P<name>[^@#~{\n]+))?\{(?P<qty>[^}%]*)(?:%(?P<unit>[^}]*))?\}"
 )
@@ -30,8 +28,6 @@ class Ingredient:
 @dataclass(frozen=True)
 class Cookware:
     name: str
-    quantity: str
-    unit: str
 
 
 @dataclass(frozen=True)
@@ -79,7 +75,7 @@ def parse_cooklang(
     ingredients: list[Ingredient] = []
     seen: set[tuple[str, str, str]] = set()
     cookware: list[Cookware] = []
-    cookware_seen: set[tuple[str, str, str]] = set()
+    cookware_seen: set[str] = set()
     timers: list[Timer] = []
     steps: list[str] = []
     current_lines: list[str] = []
@@ -97,12 +93,10 @@ def parse_cooklang(
 
     def replace_cookware(match: re.Match) -> str:
         name = clean_token_name(match.group("name") or "")
-        qty = (match.group("qty") or "").strip()
-        unit = (match.group("unit") or "").strip()
         if name:
-            key = (name.lower(), qty, unit)
+            key = name.lower()
             if key not in cookware_seen:
-                cookware.append(Cookware(name=name, quantity=qty, unit=unit))
+                cookware.append(Cookware(name=name))
                 cookware_seen.add(key)
         return name
 
