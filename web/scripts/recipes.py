@@ -140,11 +140,6 @@ def parse_cooklang(
 def load_recipe(path: Path) -> RecipeInfo | None:
     raw = path.read_text()
     fm, body = split_frontmatter(raw)
-    public_value = fm.get("public", "")
-    public = public_value.lower() != "false" if public_value else True
-    if not public:
-        return None
-
     title = fm.get("title", "") or path.stem
     ingredients, cookware, timers, steps = parse_cooklang(body)
     rel = path.relative_to(RECIPES_DIR)
@@ -159,7 +154,7 @@ def load_recipe(path: Path) -> RecipeInfo | None:
         timers=timers,
         steps=steps,
         metadata_hash=make_metadata_hash(title),
-        public=public,
+        public=True,
     )
 
 
