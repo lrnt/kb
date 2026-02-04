@@ -29,9 +29,15 @@
                     data-qty-value="{{ item.qty_value if item.qty_value is not none else '' }}"
                     data-qty-display="{{ item.qty_display }}"
                     data-fixed="{{ 'true' if item.fixed else 'false' }}">
-                    {% if item.qty_display %}<span class="ingredient-qty">{{ item.qty_display }}</span>{% endif %}
-                    {% if item.unit %}<span class="ingredient-unit">{{ item.unit }}</span>{% endif %}
-                    <span class="ingredient-name">{{ item.name }}</span>
+                    <div class="ingredient-row">
+                        <span class="ingredient-name">{{ item.name }}</span>
+                        <span class="ingredient-qty">
+                            {% if item.qty_display %}{{ item.qty_display }}{% endif %}
+                        </span>
+                        <span class="ingredient-unit">
+                            {% if item.unit %}{{ item.unit }}{% endif %}
+                        </span>
+                    </div>
                 </li>
             {% endfor %}
         </ul>

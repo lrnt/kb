@@ -159,12 +159,20 @@ a:focus-visible {
     text-align: center;
 }
 
-.recipe-ingredient .ingredient-qty,
-.recipe-ingredient .ingredient-unit {
-    margin-right: 0.35rem;
+.recipe-ingredient .ingredient-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    column-gap: 0.6rem;
+    align-items: baseline;
+}
+
+.recipe-ingredient .ingredient-qty {
+    min-width: 4ch;
+    text-align: right;
 }
 
 .recipe-ingredient .ingredient-unit {
+    min-width: 4ch;
     color: var(--muted);
 }
 
