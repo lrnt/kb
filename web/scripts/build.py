@@ -275,18 +275,24 @@ def build_recipe(
     output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    ingredients = []
-    for ingredient in recipe.ingredients:
+    ingredient_rows = []
+    for index, ingredient in enumerate(recipe.ingredients):
         qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
-        ingredients.append(
-            {
-                "name": ingredient.name,
-                "unit": ingredient.unit,
-                "qty_display": qty_display,
-                "qty_value": qty_value,
-                "fixed": fixed,
-            }
+        has_qty = bool(qty_display)
+        ingredient_rows.append(
+            (
+                not has_qty,
+                index,
+                {
+                    "name": ingredient.name,
+                    "unit": ingredient.unit,
+                    "qty_display": qty_display,
+                    "qty_value": qty_value,
+                    "fixed": fixed,
+                },
+            )
         )
+    ingredients = [row[2] for row in sorted(ingredient_rows, key=lambda row: row[:2])]
     steps = list(recipe.steps)
     servings_value = parse_decimal(recipe.servings) if recipe.servings else None
     servings_is_int = False
