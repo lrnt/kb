@@ -18,6 +18,8 @@ TIMER_RE = re.compile(
 )
 WHITESPACE_RE = re.compile(r"\s+")
 DECIMAL_RE = re.compile(r"^\d+(?:\.\d+)?$")
+REFERENCE_PREFIXES = ("./", "../")
+RECIPES_ROOT = RECIPES_DIR.resolve()
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,7 @@ class Ingredient:
     name: str
     quantity: str
     unit: str
+    ref_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -79,8 +82,25 @@ def make_metadata_hash(title: str) -> str:
     return hashlib.md5(title.encode()).hexdigest()
 
 
+def resolve_recipe_reference(name: str, recipe_path: Path) -> Path | None:
+    stripped = name.strip()
+    if not stripped or not stripped.startswith(REFERENCE_PREFIXES):
+        return None
+    ref_path = Path(stripped)
+    if ref_path.suffix != ".cook":
+        ref_path = ref_path.with_suffix(".cook")
+    candidate = (recipe_path.parent / ref_path).resolve(strict=False)
+    if not candidate.is_relative_to(RECIPES_ROOT):
+        return None
+    try:
+        return candidate.relative_to(RECIPES_ROOT)
+    except ValueError:
+        return None
+
+
 def parse_cooklang(
     content: str,
+    recipe_path: Path,
 ) -> tuple[list[Ingredient], list[Cookware], list[Timer], list[RecipeStep]]:
     ingredients: list[Ingredient] = []
     seen: set[tuple[str, str, str]] = set()
@@ -96,13 +116,18 @@ def parse_cooklang(
         name = clean_token_name(match.group("name") or "")
         qty = (match.group("qty") or "").strip()
         unit = (match.group("unit") or "").strip()
+        ref_path = resolve_recipe_reference(name, recipe_path)
         if name:
             key = (name.lower(), qty, unit)
             if key not in seen:
-                ingredients.append(Ingredient(name=name, quantity=qty, unit=unit))
+                ingredients.append(
+                    Ingredient(name=name, quantity=qty, unit=unit, ref_path=ref_path)
+                )
                 seen.add(key)
             if key not in step_ingredients_seen:
-                step_ingredients.append(Ingredient(name=name, quantity=qty, unit=unit))
+                step_ingredients.append(
+                    Ingredient(name=name, quantity=qty, unit=unit, ref_path=ref_path)
+                )
                 step_ingredients_seen.add(key)
         return name
 
@@ -174,7 +199,7 @@ def load_recipe(path: Path) -> RecipeInfo | None:
     fm, body = split_frontmatter(raw)
     title = fm.get("title", "") or path.stem
     servings = fm.get("serves", "") or fm.get("servings", "")
-    ingredients, cookware, timers, steps = parse_cooklang(body)
+    ingredients, cookware, timers, steps = parse_cooklang(body, path)
     rel = path.relative_to(RECIPES_DIR)
     slug = rel.with_suffix("")
     return RecipeInfo(
@@ -203,12 +228,13 @@ def get_recipes() -> RecipeIndex:
         if info is None:
             continue
         recipes.append(info)
-        by_path[path] = info
+        by_path[info.rel] = info
     return RecipeIndex(recipes=recipes, by_path=by_path)
 
 
 def recipe_needs_rebuild(
     recipe: RecipeInfo,
+    recipes_by_path: dict[Path, RecipeInfo],
     cache: dict,
     templates_changed: bool,
 ) -> bool:
@@ -228,6 +254,12 @@ def recipe_needs_rebuild(
 
     if recipe.path.stat().st_mtime > cached["mtime"]:
         return True
+
+    cached_refs = cached.get("ref_hashes")
+    if cached_refs is not None:
+        current_refs = build_reference_cache(recipe, recipes_by_path)
+        if cached_refs != current_refs:
+            return True
 
     return False
 
@@ -256,19 +288,65 @@ def normalize_quantity(raw: str) -> tuple[str, float | None, bool]:
     return stripped, parse_decimal(stripped) if stripped else None, fixed
 
 
-def build_step_ingredient(ingredient: Ingredient) -> dict:
+def reference_label(ingredient: Ingredient) -> str:
+    if ingredient.ref_path:
+        return ingredient.ref_path.stem
+    raw = ingredient.name
+    if not raw:
+        return raw
+    return Path(raw).name
+
+
+def resolve_ingredient_reference(
+    ingredient: Ingredient,
+    recipes_by_path: dict[Path, RecipeInfo],
+) -> tuple[str, str]:
+    if not ingredient.ref_path:
+        return ingredient.name, ""
+    ref_recipe = recipes_by_path.get(ingredient.ref_path)
+    if ref_recipe:
+        return ref_recipe.title, f"/recipes/{ref_recipe.slug.as_posix()}"
+    return reference_label(ingredient), ""
+
+
+def build_reference_cache(
+    recipe: RecipeInfo,
+    recipes_by_path: dict[Path, RecipeInfo],
+) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for ingredient in recipe.ingredients:
+        if not ingredient.ref_path:
+            continue
+        key = ingredient.ref_path.as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        ref_recipe = recipes_by_path.get(ingredient.ref_path)
+        metadata_hash = ref_recipe.metadata_hash if ref_recipe else ""
+        refs.append({"path": key, "metadata_hash": metadata_hash})
+    return sorted(refs, key=lambda item: item["path"])
+
+
+def build_step_ingredient(
+    ingredient: Ingredient,
+    recipes_by_path: dict[Path, RecipeInfo],
+) -> dict:
     qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
+    name, ref_url = resolve_ingredient_reference(ingredient, recipes_by_path)
     return {
-        "name": ingredient.name,
+        "name": name,
         "qty_display": qty_display,
         "qty_value": qty_value,
         "unit": ingredient.unit,
         "fixed": fixed,
+        "ref_url": ref_url,
     }
 
 
 def build_recipe(
     recipe: RecipeInfo,
+    recipes_by_path: dict[Path, RecipeInfo],
     cache: dict,
     template,
     nav_html: str,
@@ -280,33 +358,46 @@ def build_recipe(
     ingredient_rows = []
     for index, ingredient in enumerate(recipe.ingredients):
         qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
+        name, ref_url = resolve_ingredient_reference(ingredient, recipes_by_path)
         has_qty = bool(qty_display)
         ingredient_rows.append(
             (
                 not has_qty,
                 index,
                 {
-                    "name": ingredient.name,
+                    "name": name,
                     "unit": ingredient.unit,
                     "qty_display": qty_display,
                     "qty_value": qty_value,
                     "fixed": fixed,
+                    "ref_url": ref_url,
                 },
             )
         )
     ingredients = [row[2] for row in sorted(ingredient_rows, key=lambda row: row[:2])]
     steps = []
+    reference_labels: dict[str, str] = {}
+    for ingredient in recipe.ingredients:
+        if not ingredient.ref_path:
+            continue
+        display_name, _ = resolve_ingredient_reference(ingredient, recipes_by_path)
+        if display_name and ingredient.name:
+            reference_labels[ingredient.name] = display_name
     step_number = 0
     for item in recipe.steps:
         if item.kind == "step":
             step_number += 1
+            text = item.text
+            for raw_name, display_name in reference_labels.items():
+                if raw_name in text and display_name != raw_name:
+                    text = text.replace(raw_name, display_name)
             steps.append(
                 {
                     "kind": "step",
-                    "text": item.text,
+                    "text": text,
                     "number": step_number,
                     "ingredients": [
-                        build_step_ingredient(ingredient)
+                        build_step_ingredient(ingredient, recipes_by_path)
                         for ingredient in item.ingredients
                     ],
                 }
@@ -346,6 +437,7 @@ def build_recipe(
         "mtime": recipe.path.stat().st_mtime,
         "metadata_hash": recipe.metadata_hash,
         "output": str(output.relative_to(BUILD_DIR)),
+        "ref_hashes": build_reference_cache(recipe, recipes_by_path),
     }
 
     return output

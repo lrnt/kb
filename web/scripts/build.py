@@ -151,7 +151,13 @@ def main():
         changed_files.append(output)
 
         for recipe in recipes:
-            output = build_recipe(recipe, cache, recipe_template, nav_html)
+            output = build_recipe(
+                recipe,
+                recipe_index.by_path,
+                cache,
+                recipe_template,
+                nav_html,
+            )
             changed_files.append(output)
 
         output = build_recipes_index(recipes, recipes_template, nav_html)
@@ -241,9 +247,18 @@ def main():
 
         for recipe in recipes:
             if recipe_needs_rebuild(
-                recipe, cache, templates_changed=templates_changed_flag
+                recipe,
+                recipe_index.by_path,
+                cache,
+                templates_changed=templates_changed_flag,
             ):
-                output = build_recipe(recipe, cache, recipe_template, nav_html)
+                output = build_recipe(
+                    recipe,
+                    recipe_index.by_path,
+                    cache,
+                    recipe_template,
+                    nav_html,
+                )
                 changed_files.append(output)
 
         if recipes_pruned or recipes_index_needs_rebuild(cache, recipes):

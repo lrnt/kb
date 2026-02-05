@@ -30,7 +30,11 @@
                     data-qty-display="{{ item.qty_display }}"
                     data-fixed="{{ 'true' if item.fixed else 'false' }}">
                     <div class="ingredient-row">
-                        <span class="ingredient-name">{{ item.name }}</span>
+                        {% if item.ref_url %}
+                            <a class="ingredient-name ingredient-link" href="{{ item.ref_url }}">{{ item.name }}</a>
+                        {% else %}
+                            <span class="ingredient-name">{{ item.name }}</span>
+                        {% endif %}
                         <span class="ingredient-qty">
                             {% if item.qty_display %}{{ item.qty_display }}{% endif %}
                         </span>
@@ -60,7 +64,8 @@
                                           data-qty-display="{{ ingredient.qty_display }}"
                                           data-qty-value="{{ ingredient.qty_value if ingredient.qty_value is not none else '' }}"
                                           data-unit="{{ ingredient.unit }}"
-                                          data-fixed="{{ 'true' if ingredient.fixed else 'false' }}"></span>
+                                          data-fixed="{{ 'true' if ingredient.fixed else 'false' }}"
+                                          data-ref-url="{{ ingredient.ref_url }}"></span>
                                 {%- endfor %}
                             </div>
                         {% endif %}
@@ -104,6 +109,7 @@
       qtyValue: rawValue === '' ? NaN : Number(rawValue),
       qtyDisplay: item.dataset.qtyDisplay || '',
       fixed: item.dataset.fixed === 'true',
+      refUrl: item.dataset.refUrl || '',
     };
   });
 
@@ -132,7 +138,20 @@
 
   const renderStepIngredients = (scale) => {
     for (const item of stepItems) {
-      item.el.textContent = formatStepText(item, scale);
+      const text = formatStepText(item, scale);
+      if (item.refUrl) {
+        let link = item.el.querySelector('a');
+        if (!link) {
+          link = document.createElement('a');
+          link.className = 'ingredient-link';
+          item.el.textContent = '';
+          item.el.append(link);
+        }
+        link.href = item.refUrl;
+        link.textContent = text;
+      } else {
+        item.el.textContent = text;
+      }
     }
   };
 
