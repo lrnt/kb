@@ -5,10 +5,16 @@ import hashlib
 import html
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from paths import NOTES_DIR
+from paths import ABOUT_MD, BUILD_DIR, NOTES_DIR
+from render import render_markdown, render_page
+from static import cleanup_empty_dirs
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+
+if TYPE_CHECKING:
+    from markdown import Markdown
 
 
 @dataclass(frozen=True)
@@ -120,3 +126,125 @@ def build_nav(public_notes: list[NoteInfo]) -> tuple[str, str]:
     nav_html = "\n".join(items)
     nav_hash = hashlib.md5(nav_html.encode()).hexdigest()
     return nav_html, nav_hash
+
+
+def needs_rebuild(note: NoteInfo, cache: dict, templates_changed: bool) -> bool:
+    """Check if a note needs rebuilding."""
+    key = str(note.rel)
+    cached = cache.get("notes", {}).get(key)
+
+    if not cached:
+        return True
+
+    output = BUILD_DIR / cached["output"]
+    if not output.exists():
+        return True
+
+    if templates_changed:
+        return True
+
+    if note.path.stat().st_mtime > cached["mtime"]:
+        return True
+
+    return False
+
+
+def build_note(
+    note: NoteInfo,
+    cache: dict,
+    renderer: "Markdown",
+    template,
+    nav_html: str,
+):
+    """Build single note, return output path."""
+    rel = note.rel
+    output = BUILD_DIR / rel.with_suffix("") / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    content_html = render_markdown(renderer, note.content)
+    page_title = note.title or note.path.stem
+    page_html = render_page(
+        template,
+        page_title=page_title,
+        title=note.title,
+        nav_html=nav_html,
+        content_html=content_html,
+    )
+    output.write_text(page_html)
+
+    key = str(rel)
+    cache.setdefault("notes", {})[key] = {
+        "mtime": note.path.stat().st_mtime,
+        "metadata_hash": note.metadata_hash,
+        "output": str(output.relative_to(BUILD_DIR)),
+    }
+
+    return output
+
+
+def index_needs_rebuild(cache: dict, public_notes: list[NoteInfo]) -> bool:
+    """Check if any note's metadata changed (requires index rebuild)."""
+    for note in public_notes:
+        key = str(note.rel)
+        cached = cache.get("notes", {}).get(key, {})
+        if cached.get("metadata_hash") != note.metadata_hash:
+            return True
+
+    index_output = BUILD_DIR / "index.html"
+    if not index_output.exists():
+        return True
+    about_mtime = ABOUT_MD.stat().st_mtime if ABOUT_MD.exists() else 0
+    if about_mtime != cache.get("about_md_mtime", 0):
+        return True
+
+    return False
+
+
+def build_index(
+    cache: dict,
+    renderer: "Markdown",
+    template,
+    nav_html: str,
+):
+    """Build index.html from about.md."""
+    output = BUILD_DIR / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    about_content = ABOUT_MD.read_text() if ABOUT_MD.exists() else ""
+    fm, body = split_frontmatter(about_content)
+
+    content_html = render_markdown(renderer, body)
+    title = fm.get("title", "")
+    page_title = title
+    page_html = render_page(
+        template,
+        page_title=page_title,
+        title=title,
+        nav_html=nav_html,
+        content_html=content_html,
+    )
+    output.write_text(page_html)
+
+    cache["about_md_mtime"] = ABOUT_MD.stat().st_mtime if ABOUT_MD.exists() else 0
+
+    return output
+
+
+def prune_private_notes(cache: dict, public_notes: list[NoteInfo]) -> bool:
+    """Remove cached/build outputs for notes no longer public."""
+    public_keys = {str(note.rel) for note in public_notes}
+    removed = False
+
+    for key in list(cache.get("notes", {}).keys()):
+        if key in public_keys:
+            continue
+        cached = cache["notes"][key]
+        output = BUILD_DIR / cached.get("output", "")
+        if output.exists():
+            output.unlink()
+            cleanup_empty_dirs(output.parent, BUILD_DIR)
+            removed = True
+        del cache["notes"][key]
+        removed = True
+
+    return removed

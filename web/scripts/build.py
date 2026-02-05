@@ -10,37 +10,39 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import shutil
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from notes import (
+    build_index,
     build_nav,
+    build_note,
     get_public_notes,
+    index_needs_rebuild,
     load_note_info,
+    needs_rebuild,
     parse_frontmatter,
-    split_frontmatter,
+    prune_private_notes,
 )
-from paths import ABOUT_MD, BUILD_DIR, CACHE_FILE, ROOT
-from recipes import get_recipes
+from paths import BUILD_DIR, CACHE_FILE, ROOT
+from recipes import (
+    build_recipe,
+    build_recipes_index,
+    get_recipes,
+    prune_removed_recipes,
+    recipe_needs_rebuild,
+    recipes_index_needs_rebuild,
+)
 from render import (
     build_markdown_renderer,
     build_wikilink_map,
     get_template_env,
     get_templates_mtime,
-    render_markdown,
-    render_page,
     templates_changed,
     update_template_cache,
 )
-from static import cleanup_empty_dirs, sync_static_items
-
-if TYPE_CHECKING:
-    from markdown import Markdown
-    from notes import NoteInfo
-    from recipes import Ingredient, RecipeInfo
+from static import sync_static_items
 
 DEFAULT_CACHE = {
     "templates_mtime": 0,
@@ -50,8 +52,6 @@ DEFAULT_CACHE = {
     "recipes": {},
     "about_md_mtime": 0,
 }
-
-DECIMAL_RE = re.compile(r"^\d+(?:\.\d+)?$")
 
 
 def new_cache() -> dict:
@@ -92,347 +92,6 @@ def cleanup_build_artifacts():
     """Remove build-only artifacts from output."""
     if CACHE_FILE.exists():
         CACHE_FILE.unlink()
-
-
-def needs_rebuild(note: "NoteInfo", cache: dict, templates_changed: bool) -> bool:
-    """Check if a note needs rebuilding."""
-    key = str(note.rel)
-    cached = cache.get("notes", {}).get(key)
-
-    if not cached:
-        return True
-
-    output = BUILD_DIR / cached["output"]
-    if not output.exists():
-        return True
-
-    if templates_changed:
-        return True
-
-    if note.path.stat().st_mtime > cached["mtime"]:
-        return True
-
-    return False
-
-
-def build_note(
-    note: "NoteInfo",
-    cache: dict,
-    renderer: "Markdown",
-    template,
-    nav_html: str,
-):
-    """Build single note, return output path."""
-    rel = note.rel
-    output = BUILD_DIR / rel.with_suffix("") / "index.html"
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    content_html = render_markdown(renderer, note.content)
-    page_title = note.title or note.path.stem
-    page_html = render_page(
-        template,
-        page_title=page_title,
-        title=note.title,
-        nav_html=nav_html,
-        content_html=content_html,
-    )
-    output.write_text(page_html)
-
-    key = str(rel)
-    cache.setdefault("notes", {})[key] = {
-        "mtime": note.path.stat().st_mtime,
-        "metadata_hash": note.metadata_hash,
-        "output": str(output.relative_to(BUILD_DIR)),
-    }
-
-    return output
-
-
-def index_needs_rebuild(cache: dict, public_notes: list["NoteInfo"]) -> bool:
-    """Check if any note's metadata changed (requires index rebuild)."""
-    for note in public_notes:
-        key = str(note.rel)
-        cached = cache.get("notes", {}).get(key, {})
-        if cached.get("metadata_hash") != note.metadata_hash:
-            return True
-
-    index_output = BUILD_DIR / "index.html"
-    if not index_output.exists():
-        return True
-    about_mtime = ABOUT_MD.stat().st_mtime if ABOUT_MD.exists() else 0
-    if about_mtime != cache.get("about_md_mtime", 0):
-        return True
-
-    return False
-
-
-def build_index(
-    cache: dict,
-    renderer: "Markdown",
-    template,
-    nav_html: str,
-):
-    """Build index.html from about.md."""
-    output = BUILD_DIR / "index.html"
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    about_content = ABOUT_MD.read_text() if ABOUT_MD.exists() else ""
-    fm, body = split_frontmatter(about_content)
-
-    content_html = render_markdown(renderer, body)
-    title = fm.get("title", "")
-    page_title = title
-    page_html = render_page(
-        template,
-        page_title=page_title,
-        title=title,
-        nav_html=nav_html,
-        content_html=content_html,
-    )
-    output.write_text(page_html)
-
-    cache["about_md_mtime"] = ABOUT_MD.stat().st_mtime if ABOUT_MD.exists() else 0
-
-    return output
-
-
-def prune_private_notes(cache: dict, public_notes: list["NoteInfo"]) -> bool:
-    """Remove cached/build outputs for notes no longer public."""
-    public_keys = {str(note.rel) for note in public_notes}
-    removed = False
-
-    for key in list(cache.get("notes", {}).keys()):
-        if key in public_keys:
-            continue
-        cached = cache["notes"][key]
-        output = BUILD_DIR / cached.get("output", "")
-        if output.exists():
-            output.unlink()
-            cleanup_empty_dirs(output.parent, BUILD_DIR)
-            removed = True
-        del cache["notes"][key]
-        removed = True
-
-    return removed
-
-
-def recipe_needs_rebuild(
-    recipe: "RecipeInfo",
-    cache: dict,
-    templates_changed: bool,
-) -> bool:
-    """Check if a recipe needs rebuilding."""
-    key = str(recipe.rel)
-    cached = cache.get("recipes", {}).get(key)
-
-    if not cached:
-        return True
-
-    output = BUILD_DIR / cached["output"]
-    if not output.exists():
-        return True
-
-    if templates_changed:
-        return True
-
-    if recipe.path.stat().st_mtime > cached["mtime"]:
-        return True
-
-    return False
-
-
-def parse_decimal(value: str) -> float | None:
-    stripped = value.strip()
-    if not stripped:
-        return None
-    if not DECIMAL_RE.match(stripped):
-        return None
-    try:
-        return float(stripped)
-    except ValueError:
-        return None
-
-
-def normalize_quantity(raw: str) -> tuple[str, float | None, bool]:
-    if raw is None:
-        return "", None, False
-    stripped = raw.strip()
-    if not stripped:
-        return "", None, False
-    fixed = stripped.startswith("=")
-    if fixed:
-        stripped = stripped[1:].strip()
-    return stripped, parse_decimal(stripped) if stripped else None, fixed
-
-
-def build_step_ingredient(ingredient: "Ingredient") -> dict:
-    qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
-    return {
-        "name": ingredient.name,
-        "qty_display": qty_display,
-        "qty_value": qty_value,
-        "unit": ingredient.unit,
-        "fixed": fixed,
-    }
-
-
-def build_recipe(
-    recipe: "RecipeInfo",
-    cache: dict,
-    template,
-    nav_html: str,
-):
-    """Build single recipe, return output path."""
-    output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    ingredient_rows = []
-    for index, ingredient in enumerate(recipe.ingredients):
-        qty_display, qty_value, fixed = normalize_quantity(ingredient.quantity)
-        has_qty = bool(qty_display)
-        ingredient_rows.append(
-            (
-                not has_qty,
-                index,
-                {
-                    "name": ingredient.name,
-                    "unit": ingredient.unit,
-                    "qty_display": qty_display,
-                    "qty_value": qty_value,
-                    "fixed": fixed,
-                },
-            )
-        )
-    ingredients = [row[2] for row in sorted(ingredient_rows, key=lambda row: row[:2])]
-    steps = []
-    step_number = 0
-    for item in recipe.steps:
-        if item.kind == "step":
-            step_number += 1
-            steps.append(
-                {
-                    "kind": "step",
-                    "text": item.text,
-                    "number": step_number,
-                    "ingredients": [
-                        build_step_ingredient(ingredient)
-                        for ingredient in item.ingredients
-                    ],
-                }
-            )
-        elif item.kind == "note":
-            steps.append(
-                {
-                    "kind": "note",
-                    "text": item.text,
-                    "number": None,
-                    "ingredients": [],
-                }
-            )
-    servings_value = parse_decimal(recipe.servings) if recipe.servings else None
-    servings_is_int = False
-    servings_display = recipe.servings
-    if servings_value is not None:
-        if servings_value.is_integer() and servings_value > 0:
-            servings_is_int = True
-            servings_display = str(int(servings_value))
-
-    page_html = template.render(
-        page_title=recipe.title,
-        title=recipe.title,
-        nav_html=nav_html,
-        recipe=recipe,
-        ingredients=ingredients,
-        steps=steps,
-        servings_value=servings_value,
-        servings_is_int=servings_is_int,
-        servings_display=servings_display,
-    )
-    output.write_text(page_html)
-
-    key = str(recipe.rel)
-    cache.setdefault("recipes", {})[key] = {
-        "mtime": recipe.path.stat().st_mtime,
-        "metadata_hash": recipe.metadata_hash,
-        "output": str(output.relative_to(BUILD_DIR)),
-    }
-
-    return output
-
-
-def recipes_index_needs_rebuild(cache: dict, recipes: list["RecipeInfo"]) -> bool:
-    """Check if any recipe metadata changed (requires index rebuild)."""
-    output = BUILD_DIR / "recipes" / "index.html"
-    if not output.exists():
-        return True
-
-    cached = cache.get("recipes", {})
-    recipe_keys = {str(recipe.rel) for recipe in recipes}
-    if set(cached.keys()) != recipe_keys:
-        return True
-
-    for recipe in recipes:
-        key = str(recipe.rel)
-        cached_entry = cached.get(key, {})
-        if cached_entry.get("metadata_hash") != recipe.metadata_hash:
-            return True
-
-    return False
-
-
-def build_recipes_index(
-    recipes: list["RecipeInfo"],
-    template,
-    nav_html: str,
-):
-    """Build recipes index page."""
-    output = BUILD_DIR / "recipes" / "index.html"
-    output.parent.mkdir(parents=True, exist_ok=True)
-
-    if recipes:
-        sorted_recipes = sorted(
-            recipes,
-            key=lambda recipe: (recipe.title.lower(), recipe.slug.as_posix()),
-        )
-        recipe_items = [
-            {
-                "title": recipe.title,
-                "url": f"/recipes/{recipe.slug.as_posix()}",
-            }
-            for recipe in sorted_recipes
-        ]
-    else:
-        recipe_items = []
-
-    page_html = template.render(
-        page_title="Recipes",
-        title="Recipes",
-        nav_html=nav_html,
-        recipes=recipe_items,
-    )
-    output.write_text(page_html)
-
-    return output
-
-
-def prune_removed_recipes(cache: dict, recipes: list["RecipeInfo"]) -> bool:
-    """Remove cached/build outputs for recipes no longer present."""
-    recipe_keys = {str(recipe.rel) for recipe in recipes}
-    removed = False
-
-    for key in list(cache.get("recipes", {}).keys()):
-        if key in recipe_keys:
-            continue
-        cached = cache["recipes"][key]
-        output = BUILD_DIR / cached.get("output", "")
-        if output.exists():
-            output.unlink()
-            cleanup_empty_dirs(output.parent, BUILD_DIR)
-            removed = True
-        del cache["recipes"][key]
-        removed = True
-
-    return removed
 
 
 def main():
