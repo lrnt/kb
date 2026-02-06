@@ -3,15 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import html
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from frontmatter import split_frontmatter
 from paths import ABOUT_MD, BUILD_DIR, NOTES_DIR
 from render import render_markdown, render_page
 from static import cleanup_empty_dirs
-
-FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
 if TYPE_CHECKING:
     from markdown import Markdown
@@ -31,30 +29,6 @@ class NoteInfo:
 class NoteIndex:
     notes: list[NoteInfo]
     by_path: dict[Path, NoteInfo]
-
-
-def parse_frontmatter(content: str) -> dict:
-    """Parse YAML frontmatter into a flat dict."""
-    match = FRONTMATTER_RE.match(content)
-    if not match:
-        return {}
-
-    fm = {}
-    for line in match.group(1).split("\n"):
-        if ":" in line:
-            key, _, value = line.partition(":")
-            fm[key.strip()] = value.strip().strip("\"'")
-    return fm
-
-
-def split_frontmatter(content: str) -> tuple[dict, str]:
-    """Split YAML frontmatter from body content."""
-    match = FRONTMATTER_RE.match(content)
-    if not match:
-        return {}, content
-    fm = parse_frontmatter(content)
-    body = content[match.end() :].lstrip("\n")
-    return fm, body
 
 
 def make_metadata_hash(title: str) -> str:

@@ -20,6 +20,7 @@ from books import (
     get_books,
     sync_book_covers,
 )
+from frontmatter import parse_frontmatter
 from notes import (
     build_index,
     build_nav,
@@ -28,7 +29,6 @@ from notes import (
     index_needs_rebuild,
     load_note_info,
     needs_rebuild,
-    parse_frontmatter,
     prune_private_notes,
 )
 from paths import BUILD_DIR, CACHE_FILE, ROOT

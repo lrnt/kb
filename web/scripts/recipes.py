@@ -5,7 +5,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from notes import split_frontmatter
+from frontmatter import split_frontmatter
 from paths import BUILD_DIR, RECIPES_DIR
 from static import cleanup_empty_dirs
 
