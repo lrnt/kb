@@ -17,9 +17,7 @@
                         {% for item in nav_items %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ item.url }}">
-                                    {% if item.parent_label %}
-                                        <span class="nav-path">{{ item.parent_label }}</span>
-                                    {% endif %}
+                                    {% if item.parent_label %}<span class="nav-path">{{ item.parent_label }}</span>{% endif %}
                                     <span class="nav-title">{{ item.title }}</span>
                                 </a>
                             </li>
