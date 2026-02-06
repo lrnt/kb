@@ -1,15 +1,18 @@
 :root {
     color-scheme: light;
-    --bg: #f8f8f8;
-    --panel: #f2f2f2;
-    --text: #0f1214;
-    --muted: #666;
-    --border: #ddd;
-    --accent: #e7a15a;
-    --accent-strong: #c9823f;
-    --link: #0f1214;
-    --title-size: 1.8rem;
+    --bg: #f4f4f2;
+    --panel: #ffffff;
+    --text: #141414;
+    --muted: #6f6f6f;
+    --border: #e2e2e2;
+    --accent: #d39254;
+    --accent-strong: #b8793f;
+    --link: #1a1a1a;
+    --link-hover: #000000;
+    --title-size: 2.05rem;
     --title-line: 1.2;
+    --content-max: 72ch;
+    --radius: 8px;
 }
 
 * {
@@ -26,20 +29,19 @@ body {
         Consolas, "Liberation Mono", monospace;
     color: var(--text);
     background-color: var(--bg);
-    line-height: 1.6;
+    line-height: 1.65;
 }
 
 a {
     color: var(--link);
     text-decoration: underline;
-    text-decoration-thickness: 0.12em;
-    text-underline-offset: 0.25em;
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.2em;
 }
 
 a:hover {
-    color: var(--bg);
-    background-color: var(--text);
-    text-decoration-color: var(--text);
+    color: var(--link-hover);
+    text-decoration-color: var(--link-hover);
 }
 
 a:focus-visible {
@@ -50,23 +52,30 @@ a:focus-visible {
 
 .page {
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
-    min-height: 100vh;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 36px;
+    max-width: 1200px;
+    margin: 48px auto 96px;
+    padding: 0 24px;
+    align-items: start;
 }
 
 .sidebar {
     position: sticky;
-    top: 0;
-    height: 100vh;
+    top: 24px;
     align-self: start;
     padding: 24px 20px;
     background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-height: calc(100vh - 48px);
     overflow-y: auto;
 }
 
 .brand {
     padding-bottom: 16px;
     margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
 }
 
 .brand-link {
@@ -78,19 +87,13 @@ a:focus-visible {
     line-height: var(--title-line);
 }
 
-.brand-link:hover {
-    color: var(--bg);
-    background-color: var(--text);
-    text-decoration-color: var(--text);
-}
-
 .nav-list {
     list-style: none;
     padding: 0;
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .nav-item {
@@ -99,22 +102,21 @@ a:focus-visible {
 
 .nav-link {
     display: inline-block;
-    padding: 4px 2px;
+    padding: 3px 2px;
     text-decoration: none;
-    color: var(--text);
+    color: var(--muted);
     overflow-wrap: anywhere;
+    transition: color 0.12s ease;
 }
 
 .nav-link:hover {
-    color: var(--bg);
-    background-color: var(--text);
-    text-decoration-color: var(--text);
+    color: var(--text);
 }
 
 .nav-path {
     display: block;
-    font-size: 0.68rem;
-    letter-spacing: 0.16em;
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--muted);
     margin-bottom: 2px;
@@ -123,6 +125,7 @@ a:focus-visible {
 .nav-title {
     display: block;
     font-size: 0.92rem;
+    line-height: 1.4;
 }
 
 .recipe-servings {
@@ -236,19 +239,22 @@ a:focus-visible {
 
 
 .content {
-    padding: 24px 56px 80px;
-    background: transparent;
+    padding: 32px 40px 64px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
-.content-inner {
-    max-width: 72ch;
-    overflow-wrap: anywhere;
+.content > * {
+    max-width: var(--content-max);
 }
 
 #title-block-header {
     margin-top: 0;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 0;
 }
 
 #title-block-header .title {
@@ -264,64 +270,96 @@ h2,
 h3,
 h4 {
     font-weight: 700;
-    line-height: 1.4;
-    margin: 1.6rem 0 0.6rem;
+    line-height: 1.35;
+    margin: 1.6rem 0 0.7rem;
     letter-spacing: -0.02em;
     text-wrap: balance;
     scroll-margin-top: 1.2rem;
 }
 
 h1 {
-    font-size: 1.8rem;
+    font-size: 1.95rem;
 }
 
 h2 {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
     color: var(--text);
 }
 
 h3 {
-    font-size: 1.15rem;
+    font-size: 1.2rem;
     color: var(--text);
 }
 
-p {
-    margin: 0.7rem 0 1rem;
+.content p {
+    margin: 0.8rem 0 1.1rem;
     font-size: 1rem;
 }
 
-ul,
-ol {
-    margin: 0.4rem 0 1rem;
-    padding-left: 1.4rem;
+.content ul,
+.content ol {
+    margin: 0.6rem 0 1.1rem;
+    padding-left: 1.5rem;
 }
 
-ul {
+.content ul {
     list-style: square;
 }
 
-li {
-    margin: 0.2rem 0;
+.content li {
+    margin: 0.25rem 0;
     font-size: 1rem;
 }
 
-li::marker {
+.content li::marker {
     color: var(--accent);
+}
+
+.content code {
+    background: #f2f2f2;
+    padding: 0.12rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.95em;
+}
+
+.content pre {
+    background: #f7f7f7;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 1.2rem 0;
+    border: 1px solid var(--border);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.content pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+}
+
+.content blockquote {
+    margin: 1.2rem 0;
+    padding: 16px 18px;
+    border-left: 3px solid var(--border);
+    background: #fafafa;
+    color: var(--muted);
 }
 
 @media (max-width: 980px) {
     .page {
         display: block;
         grid-template-columns: 1fr;
-        min-height: auto;
-        align-content: start;
+        margin: 24px auto 72px;
+        padding: 0 20px;
     }
 
     .sidebar {
         position: static;
-        height: auto;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
+        max-height: none;
+        margin-bottom: 24px;
     }
 
     .nav-list {
@@ -330,14 +368,13 @@ li::marker {
     }
 
     .content {
-        padding: 32px 28px 60px;
-        align-self: start;
+        padding: 28px 26px 52px;
     }
 }
 
 @media (max-width: 640px) {
     .content {
-        padding: 24px 18px 50px;
+        padding: 22px 18px 46px;
     }
 
     .nav-list {
