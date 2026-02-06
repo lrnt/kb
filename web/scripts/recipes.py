@@ -349,7 +349,7 @@ def build_recipe(
     recipes_by_path: dict[Path, RecipeInfo],
     cache: dict,
     template,
-    nav_html: str,
+    nav_items: list,
 ):
     """Build single recipe, return output path."""
     output = BUILD_DIR / "recipes" / recipe.slug / "index.html"
@@ -422,7 +422,7 @@ def build_recipe(
     page_html = template.render(
         page_title=recipe.title,
         title=recipe.title,
-        nav_html=nav_html,
+        nav_items=nav_items,
         recipe=recipe,
         ingredients=ingredients,
         steps=steps,
@@ -466,7 +466,7 @@ def recipes_index_needs_rebuild(cache: dict, recipes: list[RecipeInfo]) -> bool:
 def build_recipes_index(
     recipes: list[RecipeInfo],
     template,
-    nav_html: str,
+    nav_items: list,
 ):
     """Build recipes index page."""
     output = BUILD_DIR / "recipes" / "index.html"
@@ -490,7 +490,7 @@ def build_recipes_index(
     page_html = template.render(
         page_title="Recipes",
         title="Recipes",
-        nav_html=nav_html,
+        nav_items=nav_items,
         recipes=recipe_items,
     )
     output.write_text(page_html)

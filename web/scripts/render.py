@@ -192,13 +192,13 @@ def render_page(
     *,
     page_title: str,
     title: str,
-    nav_html: str,
+    nav_items: list,
     content_html: str,
 ) -> str:
     """Render a full HTML page using Jinja templates."""
     return template.render(
         page_title=page_title,
         title=title,
-        nav_html=nav_html,
+        nav_items=nav_items,
         content_html=content_html,
     )

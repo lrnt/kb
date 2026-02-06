@@ -213,7 +213,7 @@ def books_index_needs_rebuild(cache: dict, books: list[BookInfo]) -> bool:
 def build_books_index(
     books: list[BookInfo],
     template,
-    nav_html: str,
+    nav_items: list,
     cache: dict,
 ):
     output = BUILD_DIR / "books" / "index.html"
@@ -223,7 +223,7 @@ def build_books_index(
     page_html = template.render(
         page_title="Books",
         title="Books",
-        nav_html=nav_html,
+        nav_items=nav_items,
         sections=sections,
     )
     output.write_text(page_html)

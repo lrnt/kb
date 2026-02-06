@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import html
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,41 +67,6 @@ def get_public_notes() -> NoteIndex:
     return NoteIndex(notes=notes, by_path=by_path)
 
 
-def build_nav(public_notes: list[NoteInfo]) -> tuple[str, str]:
-    """Build sidebar nav HTML and return HTML + hash."""
-    entries: list[tuple[str, str, str, str]] = []
-    entries.append(("books", "Books", "/books", ""))
-    entries.append(("recipes", "Recipes", "/recipes", ""))
-    for note in public_notes:
-        rel = note.rel
-        url = "/" + str(rel.with_suffix(""))
-        title = note.title or note.path.stem
-        parent = rel.parent.as_posix()
-        entries.append((title.lower(), title, url, parent))
-
-    entries.sort(key=lambda x: (x[0], x[2]))
-
-    items: list[str] = []
-
-    for _, title, url, parent in entries:
-        safe_title = html.escape(title)
-        parent_label = "" if parent in (".", "") else parent.replace("/", " / ")
-        if parent_label:
-            label = (
-                f'<span class="nav-path">{html.escape(parent_label)}</span>'
-                f'<span class="nav-title">{safe_title}</span>'
-            )
-        else:
-            label = f'<span class="nav-title">{safe_title}</span>'
-        items.append(
-            f'<li class="nav-item"><a class="nav-link" href="{url}">{label}</a></li>'
-        )
-
-    nav_html = "\n".join(items)
-    nav_hash = hashlib.md5(nav_html.encode()).hexdigest()
-    return nav_html, nav_hash
-
-
 def needs_rebuild(note: NoteInfo, cache: dict, templates_changed: bool) -> bool:
     """Check if a note needs rebuilding."""
     key = str(note.rel)
@@ -129,7 +93,7 @@ def build_note(
     cache: dict,
     renderer: "Markdown",
     template,
-    nav_html: str,
+    nav_items: list,
 ):
     """Build single note, return output path."""
     rel = note.rel
@@ -142,7 +106,7 @@ def build_note(
         template,
         page_title=page_title,
         title=note.title,
-        nav_html=nav_html,
+        nav_items=nav_items,
         content_html=content_html,
     )
     output.write_text(page_html)
@@ -179,7 +143,7 @@ def build_index(
     cache: dict,
     renderer: "Markdown",
     template,
-    nav_html: str,
+    nav_items: list,
 ):
     """Build index.html from about.md."""
     output = BUILD_DIR / "index.html"
@@ -195,7 +159,7 @@ def build_index(
         template,
         page_title=page_title,
         title=title,
-        nav_html=nav_html,
+        nav_items=nav_items,
         content_html=content_html,
     )
     output.write_text(page_html)

@@ -21,9 +21,9 @@ from books import (
     sync_book_covers,
 )
 from frontmatter import parse_frontmatter
+from nav import build_nav
 from notes import (
     build_index,
-    build_nav,
     build_note,
     get_public_notes,
     index_needs_rebuild,
@@ -145,7 +145,7 @@ def main():
     book_index = get_books()
     books = book_index.books
 
-    nav_html, nav_hash = build_nav(public_notes)
+    nav_items, nav_hash = build_nav(public_notes)
     wikilink_map = build_wikilink_map(public_notes)
     wikilinks_payload = json.dumps(wikilink_map, sort_keys=True, indent=2)
     wikilinks_hash = hashlib.md5(wikilinks_payload.encode()).hexdigest()
@@ -164,10 +164,10 @@ def main():
 
     if args.all or templates_changed_flag:
         for note in public_notes:
-            output = build_note(note, cache, renderer, base_template, nav_html)
+            output = build_note(note, cache, renderer, base_template, nav_items)
             changed_files.append(output)
 
-        output = build_index(cache, renderer, base_template, nav_html)
+        output = build_index(cache, renderer, base_template, nav_items)
         changed_files.append(output)
 
         for recipe in recipes:
@@ -176,14 +176,14 @@ def main():
                 recipe_index.by_path,
                 cache,
                 recipe_template,
-                nav_html,
+                nav_items,
             )
             changed_files.append(output)
 
-        output = build_recipes_index(recipes, recipes_template, nav_html)
+        output = build_recipes_index(recipes, recipes_template, nav_items)
         changed_files.append(output)
 
-        output = build_books_index(books, books_template, nav_html, cache)
+        output = build_books_index(books, books_template, nav_items, cache)
         changed_files.append(output)
 
         changed_files.extend(sync_build_assets(books))
@@ -211,7 +211,7 @@ def main():
                     cache,
                     renderer,
                     base_template,
-                    nav_html,
+                    nav_items,
                 )
                 changed_files.append(output)
             update_template_cache(cache, templates_mtime, nav_hash, wikilinks_hash)
@@ -223,7 +223,7 @@ def main():
             print(f"Skipped private note: {note_path}")
             return
 
-        output = build_note(note_info, cache, renderer, base_template, nav_html)
+        output = build_note(note_info, cache, renderer, base_template, nav_items)
         changed_files.append(output)
 
         if notes_pruned or index_needs_rebuild(cache, public_notes):
@@ -231,18 +231,18 @@ def main():
                 cache,
                 renderer,
                 base_template,
-                nav_html,
+                nav_items,
             )
             changed_files.append(output)
 
         changed_files.extend(sync_build_assets(books))
 
     elif args.index:
-        output = build_index(cache, renderer, base_template, nav_html)
+        output = build_index(cache, renderer, base_template, nav_items)
         changed_files.append(output)
-        output = build_recipes_index(recipes, recipes_template, nav_html)
+        output = build_recipes_index(recipes, recipes_template, nav_items)
         changed_files.append(output)
-        output = build_books_index(books, books_template, nav_html, cache)
+        output = build_books_index(books, books_template, nav_items, cache)
         changed_files.append(output)
         changed_files.extend(sync_build_assets(books))
 
@@ -252,22 +252,11 @@ def main():
     else:
         for note in public_notes:
             if needs_rebuild(note, cache, templates_changed=templates_changed_flag):
-                output = build_note(
-                    note,
-                    cache,
-                    renderer,
-                    base_template,
-                    nav_html,
-                )
+                output = build_note(note, cache, renderer, base_template, nav_items)
                 changed_files.append(output)
 
         if notes_pruned or index_needs_rebuild(cache, public_notes):
-            output = build_index(
-                cache,
-                renderer,
-                base_template,
-                nav_html,
-            )
+            output = build_index(cache, renderer, base_template, nav_items)
             changed_files.append(output)
 
         for recipe in recipes:
@@ -282,16 +271,16 @@ def main():
                     recipe_index.by_path,
                     cache,
                     recipe_template,
-                    nav_html,
+                    nav_items,
                 )
                 changed_files.append(output)
 
         if recipes_pruned or recipes_index_needs_rebuild(cache, recipes):
-            output = build_recipes_index(recipes, recipes_template, nav_html)
+            output = build_recipes_index(recipes, recipes_template, nav_items)
             changed_files.append(output)
 
         if books_index_needs_rebuild(cache, books):
-            output = build_books_index(books, books_template, nav_html, cache)
+            output = build_books_index(books, books_template, nav_items, cache)
             changed_files.append(output)
 
         changed_files.extend(sync_build_assets(books))
