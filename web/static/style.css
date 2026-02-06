@@ -1,5 +1,5 @@
 :root {
-    color-scheme: light;
+    color-scheme: light dark;
     --bg: #f4f4f2;
     --panel: #ffffff;
     --text: #141414;
@@ -9,10 +9,31 @@
     --accent-strong: #b8793f;
     --link: #1a1a1a;
     --link-hover: #000000;
+    --code-bg: #f2f2f2;
+    --pre-bg: #f7f7f7;
+    --quote-bg: #fafafa;
     --title-size: 2.05rem;
     --title-line: 1.2;
     --content-max: 72ch;
     --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+        --bg: #141312;
+        --panel: #1d1b18;
+        --text: #f2efe8;
+        --muted: #a7a29a;
+        --border: #2a2724;
+        --accent: #e0a46b;
+        --accent-strong: #f0b47b;
+        --link: #f2efe8;
+        --link-hover: #ffffff;
+        --code-bg: #26231f;
+        --pre-bg: #221f1c;
+        --quote-bg: #1f1c19;
+    }
 }
 
 * {
@@ -77,6 +98,7 @@ a:focus-visible {
     margin-bottom: 16px;
     border-bottom: 1px solid var(--border);
 }
+
 
 .brand-link {
     text-decoration: none;
@@ -316,14 +338,14 @@ h3 {
 }
 
 .content code {
-    background: #f2f2f2;
+    background: var(--code-bg);
     padding: 0.12rem 0.35rem;
     border-radius: 4px;
     font-size: 0.95em;
 }
 
 .content pre {
-    background: #f7f7f7;
+    background: var(--pre-bg);
     padding: 16px;
     border-radius: 6px;
     overflow-x: auto;
@@ -344,7 +366,7 @@ h3 {
     margin: 1.2rem 0;
     padding: 16px 18px;
     border-left: 3px solid var(--border);
-    background: #fafafa;
+    background: var(--quote-bg);
     color: var(--muted);
 }
 
