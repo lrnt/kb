@@ -14,6 +14,12 @@ import shutil
 import sys
 from pathlib import Path
 
+from books import (
+    build_books_index,
+    books_index_needs_rebuild,
+    get_books,
+    sync_book_covers,
+)
 from notes import (
     build_index,
     build_nav,
@@ -50,6 +56,7 @@ DEFAULT_CACHE = {
     "wikilinks_hash": "",
     "notes": {},
     "recipes": {},
+    "books": {},
     "about_md_mtime": 0,
 }
 
@@ -59,6 +66,7 @@ def new_cache() -> dict:
     cache = DEFAULT_CACHE.copy()
     cache["notes"] = {}
     cache["recipes"] = {}
+    cache["books"] = {}
     return cache
 
 
@@ -79,6 +87,8 @@ def load_cache() -> dict:
         cache["notes"] = {}
     if not isinstance(cache.get("recipes"), dict):
         cache["recipes"] = {}
+    if not isinstance(cache.get("books"), dict):
+        cache["books"] = {}
     return cache
 
 
@@ -92,6 +102,13 @@ def cleanup_build_artifacts():
     """Remove build-only artifacts from output."""
     if CACHE_FILE.exists():
         CACHE_FILE.unlink()
+
+
+def sync_build_assets(books: list) -> list[Path]:
+    changed = []
+    changed.extend(sync_static_items())
+    changed.extend(sync_book_covers(books))
+    return changed
 
 
 def main():
@@ -125,6 +142,8 @@ def main():
     recipe_index = get_recipes()
     recipes = recipe_index.recipes
     recipes_pruned = prune_removed_recipes(cache, recipes)
+    book_index = get_books()
+    books = book_index.books
 
     nav_html, nav_hash = build_nav(public_notes)
     wikilink_map = build_wikilink_map(public_notes)
@@ -140,6 +159,7 @@ def main():
     base_template = template_env.get_template("base.html")
     recipe_template = template_env.get_template("recipe.html")
     recipes_template = template_env.get_template("recipes.html")
+    books_template = template_env.get_template("books.html")
     renderer = build_markdown_renderer(wikilink_map)
 
     if args.all or templates_changed_flag:
@@ -163,7 +183,10 @@ def main():
         output = build_recipes_index(recipes, recipes_template, nav_html)
         changed_files.append(output)
 
-        changed_files.extend(sync_static_items())
+        output = build_books_index(books, books_template, nav_html, cache)
+        changed_files.append(output)
+
+        changed_files.extend(sync_build_assets(books))
 
     elif args.note:
         note_path = args.note if args.note.is_absolute() else ROOT / args.note
@@ -192,7 +215,7 @@ def main():
                 )
                 changed_files.append(output)
             update_template_cache(cache, templates_mtime, nav_hash, wikilinks_hash)
-            changed_files.extend(sync_static_items())
+            changed_files.extend(sync_build_assets(books))
             if args.keep_artifacts:
                 save_cache(cache)
             else:
@@ -212,17 +235,19 @@ def main():
             )
             changed_files.append(output)
 
-        changed_files.extend(sync_static_items())
+        changed_files.extend(sync_build_assets(books))
 
     elif args.index:
         output = build_index(cache, renderer, base_template, nav_html)
         changed_files.append(output)
         output = build_recipes_index(recipes, recipes_template, nav_html)
         changed_files.append(output)
-        changed_files.extend(sync_static_items())
+        output = build_books_index(books, books_template, nav_html, cache)
+        changed_files.append(output)
+        changed_files.extend(sync_build_assets(books))
 
     elif args.static:
-        changed_files.extend(sync_static_items())
+        changed_files.extend(sync_build_assets(books))
 
     else:
         for note in public_notes:
@@ -265,7 +290,11 @@ def main():
             output = build_recipes_index(recipes, recipes_template, nav_html)
             changed_files.append(output)
 
-        changed_files.extend(sync_static_items())
+        if books_index_needs_rebuild(cache, books):
+            output = build_books_index(books, books_template, nav_html, cache)
+            changed_files.append(output)
+
+        changed_files.extend(sync_build_assets(books))
 
     update_template_cache(cache, templates_mtime, nav_hash, wikilinks_hash)
     if args.keep_artifacts:

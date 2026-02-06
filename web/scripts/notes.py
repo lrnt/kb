@@ -97,6 +97,7 @@ def get_public_notes() -> NoteIndex:
 def build_nav(public_notes: list[NoteInfo]) -> tuple[str, str]:
     """Build sidebar nav HTML and return HTML + hash."""
     entries: list[tuple[str, str, str, str]] = []
+    entries.append(("books", "Books", "/books", ""))
     entries.append(("recipes", "Recipes", "/recipes", ""))
     for note in public_notes:
         rel = note.rel

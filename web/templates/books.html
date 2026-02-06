@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+    {% if sections %}
+        <section class="books">
+            {% for section in sections %}
+                <div class="books-section">
+                    <h2 class="books-section-title">{{ section.label }}</h2>
+                    <div class="books-grid">
+                        {% for book in section.books %}
+                            <article class="book-card">
+                                <div class="book-cover{% if not book.cover_url %} book-cover--missing{% endif %}">
+                                    {% if book.cover_url %}
+                                        <img src="{{ book.cover_url }}"
+                                             alt="{{ book.cover_alt }}"
+                                             loading="lazy"
+                                             decoding="async"
+                                             onerror="this.remove(); this.parentElement.classList.add('book-cover--missing');" />
+                                    {% endif %}
+                                    <div class="book-cover-fallback" aria-hidden="true">{{ book.initials }}</div>
+                                </div>
+                                    <div class="book-body">
+                                        <h3 class="book-title">{{ book.title }}</h3>
+                                        {% if book.author %}
+                                            <div class="book-author">{{ book.author }}</div>
+                                        {% endif %}
+                                        {% if book.rating %}
+                                            <div class="book-meta">
+                                                {% if book.rating %}
+                                                    <span class="book-rating">Rating {{ book.rating }}</span>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </section>
+    {% else %}
+        <p>No books yet.</p>
+    {% endif %}
+{% endblock %}
